@@ -19,6 +19,7 @@ jobs:
           - ms-security
           - ms-classroom-management
           - ms-sensor-management
+          - ms-user-management
     steps:
       - name: Checkout ${{ matrix.service }}
         uses: actions/checkout@v4
@@ -46,6 +47,7 @@ jobs:
           - ms-security
           - ms-classroom-management
           - ms-sensor-management
+          - ms-user-management
     permissions:
       contents: read
       packages: write

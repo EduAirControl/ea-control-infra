@@ -49,9 +49,11 @@ docker compose up -d --build
 | ms-security | 8081 | 8081 |
 | ms-classroom-management | 3002 | 3002 |
 | ms-sensor-management | 3004 | 3004 |
+| ms-user-management | 3007 | 3007 |
 | PostgreSQL (security) | 5437 | 5432 |
 | PostgreSQL (classroom) | 5433 | 5432 |
 | PostgreSQL (sensor) | 5434 | 5432 |
+| PostgreSQL (user-management) | 5438 | 5432 |
 | Redis | 6379 | 6379 |
 | Prometheus | 9090 | 9090 |
 | Grafana | 3001 | 3000 |

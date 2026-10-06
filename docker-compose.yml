@@ -109,6 +109,30 @@ services:
       start_period: 40s
     restart: unless-stopped
 
+  ms-user-management:
+    build: ../ms-user-management
+    image: ${REGISTRY:-eduaircontrol}/ms-user-management:${TAG:-local}
+    container_name: ms-user-management
+    ports:
+      - "3007:3007"
+    environment:
+      SERVER_PORT: 3007
+      POSTGRES_URL: jdbc:postgresql://postgres-user-management:5432/${USER_MANAGEMENT_DB:-eduaircontrol_user_management}
+      POSTGRES_USER: ${USER_MANAGEMENT_USER:-user_management_user}
+      POSTGRES_PASSWORD: ${USER_MANAGEMENT_PASSWORD:-user_management_pass}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-vault}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
+    depends_on:
+      postgres-user-management:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/3007' || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+    restart: unless-stopped
+
   postgres-security:
     image: postgres:15
     container_name: postgres-security
@@ -166,6 +190,25 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  postgres-user-management:
+    image: postgres:15
+    container_name: postgres-user-management
+    environment:
+      POSTGRES_DB: ${USER_MANAGEMENT_DB:-eduaircontrol_user_management}
+      POSTGRES_USER: ${USER_MANAGEMENT_USER:-user_management_user}
+      POSTGRES_PASSWORD: ${USER_MANAGEMENT_PASSWORD:-user_management_pass}
+    ports:
+      - "${USER_MANAGEMENT_DB_PORT:-5438}:5432"
+    volumes:
+      - user_management_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${USER_MANAGEMENT_USER:-user_management_user} -d ${USER_MANAGEMENT_DB:-eduaircontrol_user_management}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
   redis:
     image: redis:7
     container_name: redis
@@ -182,3 +225,4 @@ volumes:
   security_data:
   classroom_data:
   sensor_data:
+  user_management_data:

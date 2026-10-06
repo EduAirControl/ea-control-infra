@@ -273,3 +273,69 @@ spec:
   ports:
     - port: 3004
       targetPort: 3004
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ms-user-management
+  namespace: eduaircontrol
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ms-user-management
+  template:
+    metadata:
+      labels:
+        app: ms-user-management
+    spec:
+      containers:
+        - name: ms-user-management
+          image: eduaircontrol/ms-user-management:latest
+          ports:
+            - containerPort: 3007
+          env:
+            - name: SERVER_PORT
+              value: "3007"
+            - name: POSTGRES_URL
+              value: jdbc:postgresql://postgres-user-management:5432/eduaircontrol_user_management
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: eduaircontrol-secrets
+                  key: USER_MANAGEMENT_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: eduaircontrol-secrets
+                  key: USER_MANAGEMENT_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: eduaircontrol-secrets
+                  key: JWT_SECRET
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3007
+            initialDelaySeconds: 25
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 200m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ms-user-management
+  namespace: eduaircontrol
+spec:
+  selector:
+    app: ms-user-management
+  ports:
+    - port: 3007
+      targetPort: 3007
