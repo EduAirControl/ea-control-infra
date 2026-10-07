@@ -61,6 +61,37 @@ services:
       start_period: 40s
     restart: unless-stopped
 
+  ms-environment-monitoring:
+    build: ../ms-environment-monitoring
+    image: ${REGISTRY:-eduaircontrol}/ea-control-ms-environment-monitoring:${TAG:-local}
+    container_name: ms-environment-monitoring
+    ports:
+      - "3003:3003"
+    environment:
+      SERVER_PORT: 3003
+      POSTGRES_URL: jdbc:postgresql://postgres-monitoring:5432/${MONITORING_DB:-eduaircontrol_monitoring}
+      POSTGRES_USER: ${MONITORING_USER:-monitoring_user}
+      POSTGRES_PASSWORD: ${MONITORING_PASSWORD:-monitoring_pass}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-vault}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      DB_CHANGELOG_CONTEXTS: ${DB_CHANGELOG_CONTEXTS:-}
+    depends_on:
+      postgres-monitoring:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/3003' || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 50s
+    restart: unless-stopped
+
   ms-classroom-management:
     build: ../ms-classroom-management
     image: ${REGISTRY:-eduaircontrol}/ea-control-ms-classroom-management:${TAG:-local}
@@ -209,6 +240,44 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  postgres-monitoring:
+    image: postgres:15
+    container_name: postgres-monitoring
+    environment:
+      POSTGRES_DB: ${MONITORING_DB:-eduaircontrol_monitoring}
+      POSTGRES_USER: ${MONITORING_USER:-monitoring_user}
+      POSTGRES_PASSWORD: ${MONITORING_PASSWORD:-monitoring_pass}
+    ports:
+      - "${MONITORING_DB_PORT:-5435}:5432"
+    volumes:
+      - monitoring_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MONITORING_USER:-monitoring_user} -d ${MONITORING_DB:-eduaircontrol_monitoring}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "${RABBITMQ_PORT_HOST:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
   redis:
     image: redis:7
     container_name: redis
@@ -226,3 +295,5 @@ volumes:
   classroom_data:
   sensor_data:
   user_management_data:
+  monitoring_data:
+  rabbitmq_data:
