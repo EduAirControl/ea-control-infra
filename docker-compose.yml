@@ -3,7 +3,7 @@ name: eduaircontrol
 services:
   api-gateway:
     build: ../api-gateway
-    image: ${REGISTRY:-eduaircontrol}/api-gateway:${TAG:-local}
+    image: ${REGISTRY:-eduaircontrol}/ea-control-api-gateway:${TAG:-local}
     container_name: api-gateway
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
@@ -36,7 +36,7 @@ services:
 
   ms-security:
     build: ../ms-security
-    image: ${REGISTRY:-eduaircontrol}/ms-security:${TAG:-local}
+    image: ${REGISTRY:-eduaircontrol}/ea-control-ms-security:${TAG:-local}
     container_name: ms-security
     ports:
       - "8081:8081"
@@ -63,7 +63,7 @@ services:
 
   ms-classroom-management:
     build: ../ms-classroom-management
-    image: ${REGISTRY:-eduaircontrol}/ms-classroom-management:${TAG:-local}
+    image: ${REGISTRY:-eduaircontrol}/ea-control-ms-classroom-management:${TAG:-local}
     container_name: ms-classroom-management
     ports:
       - "3002:3002"
@@ -87,7 +87,7 @@ services:
 
   ms-sensor-management:
     build: ../ms-sensor-management
-    image: ${REGISTRY:-eduaircontrol}/ms-sensor-management:${TAG:-local}
+    image: ${REGISTRY:-eduaircontrol}/ea-control-ms-sensor-management:${TAG:-local}
     container_name: ms-sensor-management
     ports:
       - "3004:3004"
@@ -111,7 +111,7 @@ services:
 
   ms-user-management:
     build: ../ms-user-management
-    image: ${REGISTRY:-eduaircontrol}/ms-user-management:${TAG:-local}
+    image: ${REGISTRY:-eduaircontrol}/ea-control-ms-user-management:${TAG:-local}
     container_name: ms-user-management
     ports:
       - "3007:3007"
