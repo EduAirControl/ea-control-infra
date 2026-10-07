@@ -1,5 +1,5 @@
 # Imágenes: sustituye REGISTRY/TAG por tu registro real (GHCR, ECR, ...).
-#   REGISTRY=ghcr.io/jhon-cortez  TAG=1.0.0
+#   REGISTRY=ghcr.io/eduaircontrol  TAG=1.0.0
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: api-gateway
-          image: eduaircontrol/api-gateway:latest
+          image: ghcr.io/eduaircontrol/ea-control-api-gateway:latest
           ports:
             - containerPort: 8080
           envFrom:
@@ -72,7 +72,7 @@ spec:
     spec:
       containers:
         - name: ms-security
-          image: eduaircontrol/ms-security:latest
+          image: ghcr.io/eduaircontrol/ea-control-ms-security:latest
           ports:
             - containerPort: 8081
           env:
@@ -159,7 +159,7 @@ spec:
     spec:
       containers:
         - name: ms-classroom-management
-          image: eduaircontrol/ms-classroom-management:latest
+          image: ghcr.io/eduaircontrol/ea-control-ms-classroom-management:latest
           ports:
             - containerPort: 3002
           env:
@@ -225,7 +225,7 @@ spec:
     spec:
       containers:
         - name: ms-sensor-management
-          image: eduaircontrol/ms-sensor-management:latest
+          image: ghcr.io/eduaircontrol/ea-control-ms-sensor-management:latest
           ports:
             - containerPort: 3004
           env:
@@ -291,7 +291,7 @@ spec:
     spec:
       containers:
         - name: ms-user-management
-          image: eduaircontrol/ms-user-management:latest
+          image: ghcr.io/eduaircontrol/ea-control-ms-user-management:latest
           ports:
             - containerPort: 3007
           env:

@@ -71,8 +71,8 @@ kubectl apply -f deploy/k8s/apps.yaml
 kubectl apply -f deploy/k8s/ingress.yaml
 ```
 
-Sustituye `eduaircontrol/<servicio>:latest` por la imagen publicada en tu registro
-(`ghcr.io/<owner>/<servicio>:<tag>`), generada por el workflow de CI.
+Sustituye `ghcr.io/eduaircontrol/ea-control-<servicio>:latest` por la imagen publicada en tu registro
+(`ghcr.io/<owner>/ea-control-<servicio>:<tag>`), generada por el workflow de CI.
 
 ## Observabilidad
 
