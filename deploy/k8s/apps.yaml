@@ -339,3 +339,72 @@ spec:
   ports:
     - port: 3007
       targetPort: 3007
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ms-environment-monitoring
+  namespace: eduaircontrol
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ms-environment-monitoring
+  template:
+    metadata:
+      labels:
+        app: ms-environment-monitoring
+    spec:
+      containers:
+        - name: ms-environment-monitoring
+          image: eduaircontrol/ea-control-ms-environment-monitoring:latest
+          ports:
+            - containerPort: 3003
+          env:
+            - name: SERVER_PORT
+              value: "3003"
+            - name: POSTGRES_URL
+              value: jdbc:postgresql://postgres-monitoring:5432/eduaircontrol_monitoring
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: eduaircontrol-secrets
+                  key: MONITORING_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: eduaircontrol-secrets
+                  key: MONITORING_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: eduaircontrol-secrets
+                  key: JWT_SECRET
+          envFrom:
+            - configMapRef:
+                name: eduaircontrol-config
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3003
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 250m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ms-environment-monitoring
+  namespace: eduaircontrol
+spec:
+  selector:
+    app: ms-environment-monitoring
+  ports:
+    - port: 3003
+      targetPort: 3003

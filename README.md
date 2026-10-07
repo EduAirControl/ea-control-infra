@@ -50,10 +50,14 @@ docker compose up -d --build
 | ms-classroom-management | 3002 | 3002 |
 | ms-sensor-management | 3004 | 3004 |
 | ms-user-management | 3007 | 3007 |
+| ms-environment-monitoring | 3003 | 3003 |
 | PostgreSQL (security) | 5437 | 5432 |
 | PostgreSQL (classroom) | 5433 | 5432 |
 | PostgreSQL (sensor) | 5434 | 5432 |
 | PostgreSQL (user-management) | 5438 | 5432 |
+| PostgreSQL (monitoring) | 5435 | 5432 |
+| RabbitMQ | 5672 | 5672 |
+| RabbitMQ (panel) | 15672 | 15672 |
 | Redis | 6379 | 6379 |
 | Prometheus | 9090 | 9090 |
 | Grafana | 3001 | 3000 |

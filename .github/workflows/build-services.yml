@@ -20,6 +20,7 @@ jobs:
           - ms-classroom-management
           - ms-sensor-management
           - ms-user-management
+          - ms-environment-monitoring
     steps:
       - name: Checkout ${{ matrix.service }}
         uses: actions/checkout@v4
@@ -48,6 +49,7 @@ jobs:
           - ms-classroom-management
           - ms-sensor-management
           - ms-user-management
+          - ms-environment-monitoring
     permissions:
       contents: read
       packages: write

@@ -252,3 +252,66 @@ spec:
   ports:
     - port: 5432
       targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-monitoring
+  namespace: eduaircontrol
+spec:
+  serviceName: postgres-monitoring
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-monitoring
+  template:
+    metadata:
+      labels:
+        app: postgres-monitoring
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: eduaircontrol_monitoring
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: eduaircontrol-secrets
+                  key: MONITORING_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: eduaircontrol-secrets
+                  key: MONITORING_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "monitoring_user"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-monitoring
+  namespace: eduaircontrol
+spec:
+  selector:
+    app: postgres-monitoring
+  ports:
+    - port: 5432
+      targetPort: 5432
