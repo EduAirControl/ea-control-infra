@@ -2,10 +2,10 @@
 # Smoke test end-to-end a través del gateway. Requiere el stack levantado
 # (docker compose up -d) y jq instalado.
 #
-# Único seed del sistema: la cuenta SUPER_ADMIN (SuperAdminBootstrap). El smoke
-# la usa para crear una institución temporal, registrar un usuario con su
-# companyCode y validar login/logout/revocación.
-# Credenciales override con SUPERADMIN_EMAIL / SUPERADMIN_PASSWORD.
+# The only bootstrap seed is the SUPER_ADMIN account (SuperAdminBootstrap). The
+# smoke uses it to create a temporary institution, register a user with its
+# companyCode and validate login/logout/revocation.
+# Credentials can be overridden with SUPERADMIN_EMAIL / SUPERADMIN_PASSWORD.
 set -euo pipefail
 
 GATEWAY="${GATEWAY_URL:-http://localhost:8080}"
@@ -18,13 +18,13 @@ CONFIG_CODE="SMOKE${SUFFIX}"
 echo "== health del gateway =="
 curl -fsS "$GATEWAY/health" | jq .
 
-echo "== login SUPER_ADMIN =="
+echo "== SUPER_ADMIN login =="
 SA_LOGIN=$(curl -fsS -X POST "$GATEWAY/api/v1/auth/login" -H 'Content-Type: application/json' \
   -d "{\"email\":\"$SUPERADMIN_EMAIL\",\"password\":\"$SUPERADMIN_PASSWORD\"}")
 SA_TOKEN=$(echo "$SA_LOGIN" | jq -r .accessToken)
-echo "admin token obtenido: $([ -n "$SA_TOKEN" ] && echo si || echo no)"
+echo "admin token obtained: $([ -n "$SA_TOKEN" ] && echo yes || echo no)"
 
-echo "== crear institución de prueba (código $CONFIG_CODE) =="
+echo "== create test institution (code $CONFIG_CODE) =="
 curl -fsS -X POST "$GATEWAY/api/v1/institutions" -H "Authorization: Bearer $SA_TOKEN" \
   -H 'Content-Type: application/json' \
   -d "{\"code\":\"$CONFIG_CODE\",\"name\":\"Smoke Institution ${SUFFIX}\",\"type\":\"education\"}" \
