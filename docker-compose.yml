@@ -47,6 +47,18 @@ services:
       POSTGRES_PASSWORD: ${SECURITY_PASSWORD:-security_pass}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # Cliente OAuth2 de los nodos ESP32 (grant client_credentials).
+      # Sin DEVICE_OAUTH2_CLIENT_SECRET el cliente NO se registra y el firmware
+      # recibe 401 en /oauth2/token. Definirlo en el .env de infra.
+      DEVICE_OAUTH2_CLIENT_ID: ${DEVICE_OAUTH2_CLIENT_ID:-ea-control-device}
+      DEVICE_OAUTH2_CLIENT_SECRET: ${DEVICE_OAUTH2_CLIENT_SECRET:-}
+      DEVICE_OAUTH2_ACCESS_TTL: ${DEVICE_OAUTH2_ACCESS_TTL:-PT1H}
+      # Aprovisionamiento desde la app movil. signing-key es la que firma los
+      # tokens de un solo uso; sin ella ms-security arranca pero rechaza el canje.
+      DEVICE_PROVISION_SIGNING_KEY: ${DEVICE_PROVISION_SIGNING_KEY:-}
+      DEVICE_PROVISION_TOKEN_TTL: ${DEVICE_PROVISION_TOKEN_TTL:-PT15M}
+      DEVICE_PROVISION_TOKEN_URL: ${DEVICE_PROVISION_TOKEN_URL:-http://localhost:8081/oauth2/token}
+      DEVICE_PROVISION_GATEWAY_URL: ${DEVICE_PROVISION_GATEWAY_URL:-http://localhost:8080}
       SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-admin@eduaircontrol.com}
       SUPERADMIN_USERNAME: ${SUPERADMIN_USERNAME:-superadmin}
       SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-EduAirControl1!}
@@ -131,6 +143,15 @@ services:
       POSTGRES_USER: ${SENSOR_USER:-sensor_user}
       POSTGRES_PASSWORD: ${SENSOR_PASSWORD:-sensor_pass}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-vault}
+      # Publicacion de SensorInstalled / SensorRemoved por AMQP (ADR-007).
+      # Sin RABBITMQ_HOST el servicio cae en localhost, que dentro del contenedor
+      # no es el broker: el outbox acumula intentos y no publica nada.
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      SENSOR_EVENTS_EXCHANGE: ${SENSOR_EVENTS_EXCHANGE:-eduaircontrol.sensor}
+      OUTBOX_ENABLED: ${OUTBOX_ENABLED:-true}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     depends_on:
       postgres-sensor:

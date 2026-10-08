@@ -1,0 +1,13 @@
+# Secretos por nodo: nunca se versionan.
+include/config_secrets.h
+
+# Artefactos de PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+*.o
+*.bin
+*.elf
+
+# Capturas de monitor serie de pruebas locales
+*.log
