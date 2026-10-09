@@ -37,7 +37,10 @@
 // de dispositivo (roles:["DEVICE"]): los headers X-User-* estan excluidos
 // a proposito.
 // ─────────────────────────────────────────────────────────────
-#define BACKEND_HOST        "192.168.1.100"
+// IP del PC que corre el stack (interfaces de red de este equipo: 192.168.100.49).
+// IMPORTANTE: es una IP por DHCP y puede cambiar. Reserva la IP en el router o
+// cambia este valor y reflashea. El ESP32 y el PC tienen que estar en la misma red.
+#define BACKEND_HOST        "192.168.100.49"
 #define BACKEND_PORT        3003
 #define API_PATH            "/api/v1/measurements"
 
