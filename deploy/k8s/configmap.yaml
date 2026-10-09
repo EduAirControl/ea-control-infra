@@ -9,6 +9,8 @@ data:
   RATE_LIMIT_WINDOW: "60"
   REDIS_HOST: "redis"
   REDIS_PORT: "6379"
+  # Access tokens RS256 de ms-security (ADR-006)
+  JWKS_URI: "http://ms-security:8081/api/v1/auth/jwks"
   RABBITMQ_HOST: "rabbitmq"
   RABBITMQ_PORT: "5672"
   # Upstreams internos (DNS de los Services de Kubernetes)

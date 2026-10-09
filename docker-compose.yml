@@ -79,7 +79,7 @@ services:
       RABBITMQ_PORT: 5672
       RABBITMQ_USERNAME: ${RABBITMQ_USER:-guest}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-vault}
+      JWKS_URI: http://ms-security:8081/api/v1/auth/jwks
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
       DB_CHANGELOG_CONTEXTS: ${DB_CHANGELOG_CONTEXTS:-}
     depends_on:
@@ -106,12 +106,12 @@ services:
       POSTGRES_URL: jdbc:postgresql://postgres-classroom:5432/${CLASSROOM_DB:-eduaircontrol_classrooms}
       POSTGRES_USER: ${CLASSROOM_USER:-classroom_user}
       POSTGRES_PASSWORD: ${CLASSROOM_PASSWORD:-classroom_pass}
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-vault}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
       RABBITMQ_USERNAME: ${RABBITMQ_USER:-guest}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      JWKS_URI: http://ms-security:8081/api/v1/auth/jwks
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     depends_on:
       postgres-classroom:
         condition: service_healthy
@@ -136,12 +136,12 @@ services:
       POSTGRES_URL: jdbc:postgresql://postgres-sensor:5432/${SENSOR_DB:-eduaircontrol_sensors}
       POSTGRES_USER: ${SENSOR_USER:-sensor_user}
       POSTGRES_PASSWORD: ${SENSOR_PASSWORD:-sensor_pass}
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-vault}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
       RABBITMQ_USERNAME: ${RABBITMQ_USER:-guest}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      JWKS_URI: http://ms-security:8081/api/v1/auth/jwks
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     depends_on:
       postgres-sensor:
         condition: service_healthy
@@ -166,7 +166,7 @@ services:
       POSTGRES_URL: jdbc:postgresql://postgres-user-management:5432/${USER_MANAGEMENT_DB:-eduaircontrol_user_management}
       POSTGRES_USER: ${USER_MANAGEMENT_USER:-user_management_user}
       POSTGRES_PASSWORD: ${USER_MANAGEMENT_PASSWORD:-user_management_pass}
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-vault}
+      JWKS_URI: http://ms-security:8081/api/v1/auth/jwks
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     depends_on:
       postgres-user-management:
@@ -190,7 +190,7 @@ services:
       POSTGRES_URL: jdbc:postgresql://postgres-user-experience:5432/${USER_EXPERIENCE_DB:-eduaircontrol_user_experience}
       POSTGRES_USER: ${USER_EXPERIENCE_USER:-user_experience_user}
       POSTGRES_PASSWORD: ${USER_EXPERIENCE_PASSWORD:-user_experience_pass}
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-vault}
+      JWKS_URI: http://ms-security:8081/api/v1/auth/jwks
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     depends_on:
       postgres-user-experience:

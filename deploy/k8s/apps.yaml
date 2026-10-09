@@ -177,11 +177,6 @@ spec:
                 secretKeyRef:
                   name: eduaircontrol-secrets
                   key: CLASSROOM_PASSWORD
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: eduaircontrol-secrets
-                  key: JWT_SECRET
             - name: RABBITMQ_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -256,11 +251,6 @@ spec:
                 secretKeyRef:
                   name: eduaircontrol-secrets
                   key: SENSOR_PASSWORD
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: eduaircontrol-secrets
-                  key: JWT_SECRET
             - name: RABBITMQ_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -335,11 +325,6 @@ spec:
                 secretKeyRef:
                   name: eduaircontrol-secrets
                   key: USER_MANAGEMENT_PASSWORD
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: eduaircontrol-secrets
-                  key: JWT_SECRET
           readinessProbe:
             httpGet:
               path: /health
@@ -401,11 +386,6 @@ spec:
                 secretKeyRef:
                   name: eduaircontrol-secrets
                   key: MONITORING_PASSWORD
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: eduaircontrol-secrets
-                  key: JWT_SECRET
             - name: RABBITMQ_USERNAME
               valueFrom:
                 secretKeyRef:
