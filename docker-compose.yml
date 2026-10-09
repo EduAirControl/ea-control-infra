@@ -1,6 +1,28 @@
 name: eduaircontrol
 
 services:
+  # Frontend web (React + Vite). El build necesita saber a que gateway apuntar,
+  # porque Vite incrusta VITE_API_URL en el bundle: se pasa como build arg.
+  web:
+    build:
+      context: ../ea-control-frontend/apps/web
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+    image: ${REGISTRY:-eduaircontrol}/ea-control-web:${TAG:-local}
+    container_name: ea-control-web
+    ports:
+      - "${WEB_PORT:-3000}:80"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+
   api-gateway:
     build: ../api-gateway
     image: ${REGISTRY:-eduaircontrol}/ea-control-api-gateway:${TAG:-local}
