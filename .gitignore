@@ -4,3 +4,8 @@
 AGENTS.md
 opencode.json
 .opencode/
+
+# Firmware ESP32 (PlatformIO): artefactos de compilacion
+iot/**/.pio/
+iot/**/dist/
+iot/**/.vscode/
