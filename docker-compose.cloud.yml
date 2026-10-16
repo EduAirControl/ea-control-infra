@@ -1,0 +1,124 @@
+# Entorno de pruebas en la nube (Hostinger KVM 2) — EduAirControl.
+#
+# Uso:
+#   docker compose -f docker-compose.yml \
+#                   -f docker-compose.observability.yml \
+#                   -f docker-compose.cloud.yml up -d --build
+#
+# Aporta sobre el stack base:
+#   - Reverse proxy Caddy con TLS automatico (Let's Encrypt) en
+#     app./api./grafana.eduaircontrol.tech (ver Caddyfile).
+#   - Variables OAuth2 con la URL publica (los defaults del base apuntan a
+#     localhost y rompen el flujo BFF/social fuera de la maquina local).
+#   - Limites de memoria para un VPS de 8 GB de RAM.
+#   - Claves RSA de prueba montadas en ms-security (NO usar las dev del repo;
+#     generarlas en ./secrets/, que esta en .gitignore).
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: ea-control-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 128m
+
+  web:
+    mem_limit: 128m
+
+  api-gateway:
+    mem_limit: 640m
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx384m -Dserver.forward-headers-strategy=framework
+      AUTH_ISSUER: https://api.eduaircontrol.tech
+      BFF_FRONTEND_URL: https://eduaircontrol.tech/
+
+  ms-security:
+    mem_limit: 640m
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx512m -Dserver.forward-headers-strategy=framework
+      OAUTH2_ISSUER: https://api.eduaircontrol.tech
+      OAUTH2_WEB_REDIRECT_URI: https://api.eduaircontrol.tech/login/oauth2/code/web
+      SOCIAL_CALLBACK_BASE_URL: https://api.eduaircontrol.tech
+      FRONTEND_URL: https://eduaircontrol.tech
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      FACEBOOK_CLIENT_ID: ${FACEBOOK_CLIENT_ID:-}
+      FACEBOOK_CLIENT_SECRET: ${FACEBOOK_CLIENT_SECRET:-}
+      SECURITY_RSA_PRIVATE_KEY_PATH: /app/keys/test-private.pem
+      SECURITY_RSA_PUBLIC_KEY_PATH: /app/keys/test-public.pem
+    volumes:
+      - ./secrets/test-private.pem:/app/keys/test-private.pem:ro
+      - ./secrets/test-public.pem:/app/keys/test-public.pem:ro
+
+  ms-classroom-management:
+    mem_limit: 640m
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx512m
+
+  ms-sensor-management:
+    mem_limit: 640m
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx512m
+
+  ms-environment-monitoring:
+    mem_limit: 640m
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx512m
+
+  ms-user-management:
+    mem_limit: 640m
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx512m
+
+  ms-user-experience:
+    mem_limit: 640m
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx512m
+
+  postgres-security:
+    mem_limit: 384m
+
+  postgres-classroom:
+    mem_limit: 384m
+
+  postgres-sensor:
+    mem_limit: 384m
+
+  postgres-user-management:
+    mem_limit: 384m
+
+  postgres-user-experience:
+    mem_limit: 384m
+
+  postgres-monitoring:
+    mem_limit: 384m
+
+  rabbitmq:
+    mem_limit: 384m
+
+  redis:
+    mem_limit: 128m
+
+  prometheus:
+    mem_limit: 512m
+
+  grafana:
+    mem_limit: 256m
+
+  otel-collector:
+    mem_limit: 128m
+
+volumes:
+  caddy_data:
+  caddy_config:
