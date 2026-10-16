@@ -24,3 +24,18 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ["ms-sensor-management:3004"]
+
+  - job_name: ms-environment-monitoring
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["ms-environment-monitoring:3003"]
+
+  - job_name: ms-user-management
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["ms-user-management:3007"]
+
+  - job_name: ms-user-experience
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["ms-user-experience:3006"]
