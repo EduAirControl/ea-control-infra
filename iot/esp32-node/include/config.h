@@ -89,7 +89,10 @@
 // ─────────────────────────────────────────────────────────────
 // TIMING
 // ─────────────────────────────────────────────────────────────
-#define SENSOR_READ_INTERVAL_MS  30000   // 30 s entre ciclos de medicion
+// 10 s por ciclo: el DHT-11 exige >=1 s entre lecturas y el rate limit del
+// gateway (100 req/min por usuario y ruta) admite holgadamente los 4 POST
+// del ciclo (24/min). Bajar de 10 s no gana nada en la nube.
+#define SENSOR_READ_INTERVAL_MS  10000   // 10 s entre ciclos de medicion
 #define HTTP_TIMEOUT_MS          10000
 #define WIFI_CONNECT_TIMEOUT_MS  20000
 #define BLE_PROVISION_TIMEOUT_MS 300000  // 5 min esperando provisioning
