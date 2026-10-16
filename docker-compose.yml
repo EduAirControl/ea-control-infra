@@ -11,7 +11,7 @@ services:
     image: ${REGISTRY:-eduaircontrol}/ea-control-web:${TAG:-local}
     container_name: ea-control-web
     ports:
-      - "${WEB_PORT:-3000}:80"
+      - "127.0.0.1:${WEB_PORT:-3000}:80"
     depends_on:
       api-gateway:
         condition: service_healthy
@@ -28,7 +28,7 @@ services:
     image: ${REGISTRY:-eduaircontrol}/ea-control-api-gateway:${TAG:-local}
     container_name: api-gateway
     ports:
-      - "${GATEWAY_PORT:-8080}:8080"
+      - "127.0.0.1:${GATEWAY_PORT:-8080}:8080"
     environment:
       SERVER_PORT: 8080
       REDIS_HOST: redis
@@ -61,7 +61,7 @@ services:
     image: ${REGISTRY:-eduaircontrol}/ea-control-ms-security:${TAG:-local}
     container_name: ms-security
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     environment:
       SERVER_PORT: 8081
       POSTGRES_URL: jdbc:postgresql://postgres-security:5432/${SECURITY_DB:-eduaircontrol_security}
@@ -91,7 +91,7 @@ services:
     image: ${REGISTRY:-eduaircontrol}/ea-control-ms-environment-monitoring:${TAG:-local}
     container_name: ms-environment-monitoring
     ports:
-      - "3003:3003"
+      - "127.0.0.1:3003:3003"
     environment:
       SERVER_PORT: 3003
       POSTGRES_URL: jdbc:postgresql://postgres-monitoring:5432/${MONITORING_DB:-eduaircontrol_monitoring}
@@ -122,7 +122,7 @@ services:
     image: ${REGISTRY:-eduaircontrol}/ea-control-ms-classroom-management:${TAG:-local}
     container_name: ms-classroom-management
     ports:
-      - "3002:3002"
+      - "127.0.0.1:3002:3002"
     environment:
       SERVER_PORT: 3002
       POSTGRES_URL: jdbc:postgresql://postgres-classroom:5432/${CLASSROOM_DB:-eduaircontrol_classrooms}
@@ -152,7 +152,7 @@ services:
     image: ${REGISTRY:-eduaircontrol}/ea-control-ms-sensor-management:${TAG:-local}
     container_name: ms-sensor-management
     ports:
-      - "3004:3004"
+      - "127.0.0.1:3004:3004"
     environment:
       SERVER_PORT: 3004
       POSTGRES_URL: jdbc:postgresql://postgres-sensor:5432/${SENSOR_DB:-eduaircontrol_sensors}
@@ -182,7 +182,7 @@ services:
     image: ${REGISTRY:-eduaircontrol}/ea-control-ms-user-management:${TAG:-local}
     container_name: ms-user-management
     ports:
-      - "3007:3007"
+      - "127.0.0.1:3007:3007"
     environment:
       SERVER_PORT: 3007
       POSTGRES_URL: jdbc:postgresql://postgres-user-management:5432/${USER_MANAGEMENT_DB:-eduaircontrol_user_management}
@@ -206,7 +206,7 @@ services:
     image: ${REGISTRY:-eduaircontrol}/ea-control-ms-user-experience:${TAG:-local}
     container_name: ms-user-experience
     ports:
-      - "3006:3006"
+      - "127.0.0.1:3006:3006"
     environment:
       SERVER_PORT: 3006
       POSTGRES_URL: jdbc:postgresql://postgres-user-experience:5432/${USER_EXPERIENCE_DB:-eduaircontrol_user_experience}
@@ -233,7 +233,7 @@ services:
       POSTGRES_USER: ${SECURITY_USER:-security_user}
       POSTGRES_PASSWORD: ${SECURITY_PASSWORD:-security_pass}
     ports:
-      - "${SECURITY_DB_PORT:-5437}:5432"
+      - "127.0.0.1:${SECURITY_DB_PORT:-5437}:5432"
     volumes:
       - security_data:/var/lib/postgresql/data
     healthcheck:
@@ -252,7 +252,7 @@ services:
       POSTGRES_USER: ${CLASSROOM_USER:-classroom_user}
       POSTGRES_PASSWORD: ${CLASSROOM_PASSWORD:-classroom_pass}
     ports:
-      - "${CLASSROOM_DB_PORT:-5433}:5432"
+      - "127.0.0.1:${CLASSROOM_DB_PORT:-5433}:5432"
     volumes:
       - classroom_data:/var/lib/postgresql/data
     healthcheck:
@@ -271,7 +271,7 @@ services:
       POSTGRES_USER: ${SENSOR_USER:-sensor_user}
       POSTGRES_PASSWORD: ${SENSOR_PASSWORD:-sensor_pass}
     ports:
-      - "${SENSOR_DB_PORT:-5434}:5432"
+      - "127.0.0.1:${SENSOR_DB_PORT:-5434}:5432"
     volumes:
       - sensor_data:/var/lib/postgresql/data
     healthcheck:
@@ -290,7 +290,7 @@ services:
       POSTGRES_USER: ${USER_MANAGEMENT_USER:-user_management_user}
       POSTGRES_PASSWORD: ${USER_MANAGEMENT_PASSWORD:-user_management_pass}
     ports:
-      - "${USER_MANAGEMENT_DB_PORT:-5438}:5432"
+      - "127.0.0.1:${USER_MANAGEMENT_DB_PORT:-5438}:5432"
     volumes:
       - user_management_data:/var/lib/postgresql/data
     healthcheck:
@@ -309,7 +309,7 @@ services:
       POSTGRES_USER: ${USER_EXPERIENCE_USER:-user_experience_user}
       POSTGRES_PASSWORD: ${USER_EXPERIENCE_PASSWORD:-user_experience_pass}
     ports:
-      - "${USER_EXPERIENCE_DB_PORT:-5439}:5432"
+      - "127.0.0.1:${USER_EXPERIENCE_DB_PORT:-5439}:5432"
     volumes:
       - user_experience_data:/var/lib/postgresql/data
     healthcheck:
@@ -328,7 +328,7 @@ services:
       POSTGRES_USER: ${MONITORING_USER:-monitoring_user}
       POSTGRES_PASSWORD: ${MONITORING_PASSWORD:-monitoring_pass}
     ports:
-      - "${MONITORING_DB_PORT:-5435}:5432"
+      - "127.0.0.1:${MONITORING_DB_PORT:-5435}:5432"
     volumes:
       - monitoring_data:/var/lib/postgresql/data
     healthcheck:
@@ -346,8 +346,8 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
     ports:
-      - "${RABBITMQ_PORT_HOST:-5672}:5672"
-      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+      - "127.0.0.1:${RABBITMQ_PORT_HOST:-5672}:5672"
+      - "127.0.0.1:${RABBITMQ_MGMT_PORT:-15672}:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -362,7 +362,7 @@ services:
     image: redis:7
     container_name: redis
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

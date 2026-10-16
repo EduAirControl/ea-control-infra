@@ -13,7 +13,7 @@ SUPERADMIN_EMAIL="${SUPERADMIN_EMAIL:-admin@eduaircontrol.com}"
 SUPERADMIN_PASSWORD="${SUPERADMIN_PASSWORD:-EduAirControl1!}"
 SUFFIX="$(date +%s)"
 EMAIL="smoke-${SUFFIX}@example.com"
-CONFIG_CODE="SMOKE${SUFFIX}"
+CONFIG_CODE="SMK-$(printf '%04d' $((SUFFIX % 10000)))"
 
 echo "== health del gateway =="
 curl -fsS "$GATEWAY/health" | jq .
