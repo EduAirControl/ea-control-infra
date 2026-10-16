@@ -73,6 +73,14 @@ services:
       SUPERADMIN_USERNAME: ${SUPERADMIN_USERNAME:-superadmin}
       SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-EduAirControl1!}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      # Claves RSA desde ./secrets (gitignored): el kid del JWKS debe ser
+      # estable entre recreaciones del contenedor, si no todos los tokens
+      # de dispositivo (ESP32) quedan invalidos con un 401 silencioso.
+      SECURITY_RSA_PRIVATE_KEY_PATH: /app/keys/test-private.pem
+      SECURITY_RSA_PUBLIC_KEY_PATH: /app/keys/test-public.pem
+    volumes:
+      - ./secrets/test-private.pem:/app/keys/test-private.pem:ro
+      - ./secrets/test-public.pem:/app/keys/test-public.pem:ro
     depends_on:
       postgres-security:
         condition: service_healthy
