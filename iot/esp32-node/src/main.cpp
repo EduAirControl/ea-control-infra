@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <DHT.h>
@@ -10,6 +11,9 @@
 #include <BLE2902.h>
 
 #include "config.h"
+#if BACKEND_USE_TLS
+#include "ca_cert.h"
+#endif
 
 // ============================================================
 // EduAirControl - Nodo ESP32 de medicion ambiental
@@ -34,6 +38,9 @@ static DHT dht(DHT11_PIN, DHT_TYPE);
 static unsigned long bootMs = 0;
 static unsigned long lastReadMs = 0;
 static bool bleRunning = false;
+// El backend contesta 410 cuando la instalacion fue desvinculada o purgada: ya no
+// existe y no volvera a aceptar datos. Se corta el envio para no spamear la API.
+static bool installationGone = false;
 
 // ─────────────────────────────────────────────────────────────
 // Persistencia
@@ -79,12 +86,23 @@ static void notifyStatus(const char* status) {
 
 static void stopProvisioning() {
     if (!bleRunning) return;
+    // Pequena espera: notify() es asincrono; sin esto el STATUS:CONNECTED se
+    // pierde al deinit inmediato y la app sufre timeout de 45 s.
+    delay(300);
     BLEDevice::deinit(true);
     bleRunning = false;
     Serial.println("[BLE] provisioning detenido");
 }
 
+// Señal desde el callback BLE (onWrite corre en la task del stack: llamar
+// BLEDevice::deinit dentro de ella congela el sistema). El loop() retira el
+// BLE cuando lo ve en alto.
+static volatile bool pendingStopBle = false;
+
 static void connectWifiFromConfig() {
+    // Un aprovisionamiento nuevo trae un installationId nuevo: el rechazo (410)
+    // del anterior deja de valer.
+    installationGone = false;
     Serial.printf("[WIFI] conectando a '%s'\n", wifiSsid.c_str());
     WiFi.mode(WIFI_STA);
     WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
@@ -97,8 +115,8 @@ static void connectWifiFromConfig() {
     if (WiFi.status() == WL_CONNECTED) {
         Serial.printf("[WIFI] conectado, IP %s\n", WiFi.localIP().toString().c_str());
         notifyStatus("STATUS:CONNECTED");
-        // Con WiFi ya no hace falta el BLE: se libera la radio.
-        stopProvisioning();
+        // No deinit aqui (estamos en la task BLE): lo hace el loop().
+        pendingStopBle = true;
     } else {
         Serial.println("[WIFI] no se pudo conectar");
         notifyStatus("STATUS:FAIL");
@@ -113,17 +131,35 @@ class ServerCallbacks : public BLEServerCallbacks {
     }
 };
 
+// Buffer de reensamblado BLE: la app escribe el JSON en trozos de ~400 chars
+// (el payload con el JWT son ~800 bytes y el long-write de Android al
+// Bluedroid falla en la practica). Cada onWrite concatena; se parsea cuando
+// ArduinoJson deja de reportar IncompleteInput.
+static String bleRxBuffer;
+
 class CharacteristicCallbacks : public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic* characteristic) override {
         String value = String(characteristic->getValue().c_str());
         if (value.length() == 0) return;
 
+        bleRxBuffer += value;
+        Serial.printf("[BLE] chunk (%d bytes, buffer=%d)\n", (int)value.length(), (int)bleRxBuffer.length());
+
         JsonDocument doc;
-        if (deserializeJson(doc, value)) {
+        DeserializationError err = deserializeJson(doc, bleRxBuffer);
+        if (err == DeserializationError::IncompleteInput) {
+            // Faltan trozos: esperar el siguiente write.
+            return;
+        }
+        if (err) {
+            bleRxBuffer = "";
             Serial.println("[BLE] JSON invalido");
             notifyStatus("STATUS:ERR_JSON");
             return;
         }
+
+        // JSON completo y valido.
+        bleRxBuffer = "";
 
         const char* ssid = doc["ssid"];
         const char* pass = doc["pass"];
@@ -207,6 +243,7 @@ static float readCo2Ppm() {
 // Ingesta HTTP
 // ─────────────────────────────────────────────────────────────
 static bool sendMeasurement(const char* variableId, float value) {
+    if (installationGone) return false;
     if (WiFi.status() != WL_CONNECTED) return false;
     if (isnan(value)) return false;
 
@@ -219,10 +256,16 @@ static bool sendMeasurement(const char* variableId, float value) {
     String body;
     serializeJson(doc, body);
 
+#if BACKEND_USE_TLS
+    WiFiClientSecure client;
+    client.setCACert(ISRG_ROOT_X1_PEM);
+#else
     WiFiClient client;
+#endif
     HTTPClient http;
     http.setTimeout(HTTP_TIMEOUT_MS);
-    String url = String("http://") + BACKEND_HOST + ":" + String(BACKEND_PORT) + API_PATH;
+    String scheme = BACKEND_USE_TLS ? "https" : "http";
+    String url = String(scheme) + "://" + BACKEND_HOST + ":" + String(BACKEND_PORT) + API_PATH;
 
     if (!http.begin(client, url)) {
         Serial.println("[HTTP] no se pudo abrir la conexion");
@@ -233,6 +276,15 @@ static bool sendMeasurement(const char* variableId, float value) {
 
     int code = http.POST(body);
     http.end();
+
+    // 410 Gone: la instalacion ya no existe en el backend (desvinculada o purgada
+    // desde la app o la web). Reenviar no la va a recrear, asi que se corta.
+    if (code == 410) {
+        installationGone = true;
+        Serial.println("[HTTP] 410: la instalacion ya no existe.");
+        Serial.println("[HTTP] hay que aprovisionar el nodo de nuevo.");
+        return false;
+    }
 
     bool ok = code == 200 || code == 201;
     Serial.printf("[HTTP] %s -> %d %s\n", variableId, code, ok ? "ok" : "FALLO");
@@ -295,6 +347,13 @@ void setup() {
 }
 
 void loop() {
+    // Retiro del BLE pedido desde el callback: se hace aqui (task principal),
+    // nunca dentro de la task del stack BLE.
+    if (pendingStopBle) {
+        pendingStopBle = false;
+        stopProvisioning();
+    }
+
     if (bleRunning) {
         // Mientras se provisiona no se mide: evita enviar con credenciales a medias.
         delay(100);
@@ -309,6 +368,15 @@ void loop() {
     }
 
     if (!readyToReport()) {
+        startProvisioning();
+        return;
+    }
+
+    // El backend rechazo la instalacion (410): ya no existe. Se vuelve a ofrecer
+    // como ESP32_Config para que se reprovisione desde la app, sin reflashear.
+    // Como startProvisioning pone bleRunning en alto, este aviso solo se imprime una vez.
+    if (installationGone) {
+        Serial.println("[SENSOR] instalacion dada de baja: entrando en provisioning");
         startProvisioning();
         return;
     }

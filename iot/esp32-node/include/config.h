@@ -31,17 +31,18 @@
 #define LED_STATUS_PIN        2
 
 // ─────────────────────────────────────────────────────────────
-// BACKEND (ms-environment-monitoring, puerto 3003)
+// BACKEND (api-gateway en la nube: https://api.eduaircontrol.tech)
 //
 // El unico camino de ingesta es POST /api/v1/measurements. Exige un token
 // de dispositivo (roles:["DEVICE"]): los headers X-User-* estan excluidos
-// a proposito.
+// a proposito. El gateway enruta /api/v1/measurements/** a
+// ms-environment-monitoring.
 // ─────────────────────────────────────────────────────────────
-// IP del PC que corre el stack (interfaces de red de este equipo: 192.168.100.49).
-// IMPORTANTE: es una IP por DHCP y puede cambiar. Reserva la IP en el router o
-// cambia este valor y reflashea. El ESP32 y el PC tienen que estar en la misma red.
-#define BACKEND_HOST        "192.168.100.49"
-#define BACKEND_PORT        3003
+// Entorno de pruebas en la nube (Hostinger, eduaircontrol.tech). TLS con el
+// root CA de Let's Encrypt incluido en ca_cert.h.
+#define BACKEND_HOST        "api.eduaircontrol.tech"
+#define BACKEND_PORT        443
+#define BACKEND_USE_TLS     1
 #define API_PATH            "/api/v1/measurements"
 
 // ─────────────────────────────────────────────────────────────
