@@ -72,6 +72,13 @@ services:
       SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-admin@eduaircontrol.com}
       SUPERADMIN_USERNAME: ${SUPERADMIN_USERNAME:-superadmin}
       SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-EduAirControl1!}
+      # Correo SMTP (recuperación de contraseña). Con SMTP_HOST vacío el código
+      # se registra en el log en lugar de enviarse. En dev usa mailpit:1025.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-${SMTP_USERNAME:-}}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
       # Claves RSA desde ./secrets (gitignored): el kid del JWKS debe ser
       # estable entre recreaciones del contenedor, si no todos los tokens
@@ -376,6 +383,17 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
+
+  # Captura los correos de ms-security sin enviar nada real (solo desarrollo:
+  # docker compose --profile dev up -d mailpit; UI en :8025, SMTP en :1025).
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    profiles: ["dev"]
+    ports:
+      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:1025:1025"
     restart: unless-stopped
 
 volumes:
