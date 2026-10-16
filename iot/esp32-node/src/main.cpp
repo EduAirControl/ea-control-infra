@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <DHT.h>
@@ -10,6 +11,9 @@
 #include <BLE2902.h>
 
 #include "config.h"
+#if BACKEND_USE_TLS
+#include "ca_cert.h"
+#endif
 
 // ============================================================
 // EduAirControl - Nodo ESP32 de medicion ambiental
@@ -252,10 +256,16 @@ static bool sendMeasurement(const char* variableId, float value) {
     String body;
     serializeJson(doc, body);
 
+#if BACKEND_USE_TLS
+    WiFiClientSecure client;
+    client.setCACert(ISRG_ROOT_X1_PEM);
+#else
     WiFiClient client;
+#endif
     HTTPClient http;
     http.setTimeout(HTTP_TIMEOUT_MS);
-    String url = String("http://") + BACKEND_HOST + ":" + String(BACKEND_PORT) + API_PATH;
+    String scheme = BACKEND_USE_TLS ? "https" : "http";
+    String url = String(scheme) + "://" + BACKEND_HOST + ":" + String(BACKEND_PORT) + API_PATH;
 
     if (!http.begin(client, url)) {
         Serial.println("[HTTP] no se pudo abrir la conexion");
