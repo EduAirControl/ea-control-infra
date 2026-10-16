@@ -225,11 +225,16 @@ static float readNoiseDb() {
 }
 
 // MQ-135: ADC -> voltaje real (con divisor) -> Rs -> ppm aproximado por la
-// curva del datasheet. NO es un CO2 NDIR: el valor es orientativo.
+// curva del datasheet. NO es un sensor NDIR de CO2: el valor es orientativo.
 static float readCo2Ppm() {
     float raw = (float)analogRead(MQ135_PIN);
     float vOut = (raw / 4095.0f) * 3.3f * MQ135_DIVIDER_RATIO;
-    if (vOut <= 0.01f) return NAN;
+    if (vOut <= 0.01f) {
+        Serial.printf("[MQ-135] sin lectura valida (ADC=%.0f, Vout=%.3fV): "
+                      "revisa cableado A0->GPIO%d, VCC 5V y GND\n",
+                      raw, vOut, MQ135_PIN);
+        return NAN;
+    }
 
     float vC = 5.0f;
     float rs = ((vC - vOut) * MQ135_RL) / vOut;
@@ -245,7 +250,10 @@ static float readCo2Ppm() {
 static bool sendMeasurement(const char* variableId, float value) {
     if (installationGone) return false;
     if (WiFi.status() != WL_CONNECTED) return false;
-    if (isnan(value)) return false;
+    if (isnan(value)) {
+        Serial.printf("[HTTP] se omite %s: el sensor no devolvio valor\n", variableId);
+        return false;
+    }
 
     JsonDocument doc;
     doc["sensorInstallationId"] = installationId;
