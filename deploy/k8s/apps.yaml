@@ -94,6 +94,21 @@ spec:
               value: /app/keys/dev-private.pem
             - name: SECURITY_RSA_PUBLIC_KEY_PATH
               value: /app/keys/dev-public.pem
+            - name: SUPERADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: eduaircontrol-secrets
+                  key: SUPERADMIN_EMAIL
+            - name: SUPERADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: eduaircontrol-secrets
+                  key: SUPERADMIN_USERNAME
+            - name: SUPERADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: eduaircontrol-secrets
+                  key: SUPERADMIN_PASSWORD
           envFrom:
             - configMapRef:
                 name: eduaircontrol-config
