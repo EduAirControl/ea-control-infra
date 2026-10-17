@@ -29,7 +29,11 @@ infra/
 │   └── ingress.yaml
 ├── observability/                   # prometheus.yml + otel-collector.yaml
 ├── iot/esp32-node/                  # Firmware PlatformIO del nodo de medición
-└── .github/workflows/build-services.yml
+├── docker-compose.cloud.yml         # Overlay VPS (Caddy TLS, límites, OAuth2 público)
+├── docker-compose.jenkins.yml       # Overlay CI/CD: Jenkins (ADR-019)
+├── jenkins/                         # Dockerfile + jobs.groovy + Jenkinsfile.test/deploy + seed
+├── Caddyfile                        # TLS: app/api/grafana/jenkins.eduaircontrol.tech
+└── .github/workflows/build-services.yml  # GitHub Actions (se retira tras el 1er deploy verde, ADR-019)
 ```
 
 ## Arranque local
@@ -90,8 +94,29 @@ kubectl apply -f deploy/k8s/apps.yaml
 kubectl apply -f deploy/k8s/ingress.yaml
 ```
 
-Sustituye `ghcr.io/eduaircontrol/ea-control-<servicio>:latest` por la imagen publicada en tu registro
-(`ghcr.io/<owner>/ea-control-<servicio>:<tag>`), generada por el workflow de CI.
+Las imágenes `ghcr.io/eduaircontrol/ea-control-<servicio>:<tag>` las publica el pipeline
+de deploy de Jenkins (ADR-019); ver `## CI/CD (Jenkins)` y `docs-ea-control/10-devops/ci-cd.md`.
+
+## CI/CD (Jenkins)
+
+Jenkins es la CI/CD oficial (ADR-019): corre como contenedor en el VPS y automatiza
+tests + deploy. Corre completo en `docs-ea-control/10-devops/ci-cd.md`.
+
+```bash
+# Arrancar Jenkins (VPS, junto al resto del stack):
+docker compose -f docker-compose.yml -f docker-compose.cloud.yml \
+                -f docker-compose.observability.yml \
+                -f docker-compose.jenkins.yml up -d --build jenkins
+
+# Password inicial:
+docker exec ea-control-jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+```
+
+- Panel: `https://jenkins.eduaircontrol.tech` (Caddy) o túnel SSH a `localhost:8085`.
+- `test-<svc>` en cada push a `develop`/`main`; en `main` verde encadena
+  `deploy-<svc>`: build → GHCR → `compose pull/up` → smoke.
+- Credenciales Jenkins: `github-infra` (clone de este repo) y `ghcr-bot` (push GHCR).
+- Tras el primer deploy verde se borra `.github/workflows/build-services.yml`.
 
 ## Observabilidad
 
