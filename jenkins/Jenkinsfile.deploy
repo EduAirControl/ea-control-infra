@@ -1,0 +1,104 @@
+// Deploy automatico de un servicio (ADR-019). Encadenado por test-<servicio>
+// cuando el push es sobre main: build de la imagen -> push a GHCR ->
+// `docker compose pull/up` del stack del VPS -> wait + smoke.
+//
+// Repositorio ya testeado; aqui solo importa el artefacto (imagen inmutable
+// etiquetada con el SHA + latest).
+pipeline {
+  agent any
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+  }
+  environment {
+    STACK_DIR = '/opt/eduaircontrol/infra'
+  }
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout([$class: 'Git',
+                  url: "${REPO_URL}",
+                  branches: [[name: "${COMMIT_SHA}"]],
+                  extensions: [[$class: 'CloneOption', shallow: false, depth: 1, noTags: true]]])
+      }
+    }
+    stage('Build image') {
+      steps {
+        dir("${STACK_DIR}") {
+          sh '''
+            set -eu
+            set -a; . ./.env; set +a   # REGISTRY, TAG, VITE_API_URL
+            IMAGE="ea-control-${SERVICE_NAME}"
+            if [ "${SERVICE_NAME}" = "web" ]; then
+              CTX="${WORKSPACE}/apps/web"
+              docker build --build-arg "VITE_API_URL=${VITE_API_URL}" \\
+                -t "${REGISTRY}/${IMAGE}:${COMMIT_SHA}" -t "${REGISTRY}/${IMAGE}:latest" \\
+                "${CTX}"
+            else
+              docker build \\
+                -t "${REGISTRY}/${IMAGE}:${COMMIT_SHA}" -t "${REGISTRY}/${IMAGE}:latest" \\
+                "${WORKSPACE}"
+            fi
+          '''
+        }
+      }
+    }
+    stage('Push GHCR') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'ghcr-bot',
+                                          usernameVariable: 'GH_USER',
+                                          passwordVariable: 'GH_TOKEN')]) {
+          dir("${STACK_DIR}") {
+            sh '''
+              set -eu
+              set -a; . ./.env; set +a
+              IMAGE="ea-control-${SERVICE_NAME}"
+              echo "${GH_TOKEN}" | docker login ghcr.io -u "${GH_USER}" --password-stdin
+              docker push "${REGISTRY}/${IMAGE}:${COMMIT_SHA}"
+              docker push "${REGISTRY}/${IMAGE}:latest"
+            '''
+          }
+        }
+      }
+    }
+    stage('Deploy (compose pull + up)') {
+      steps {
+        dir("${STACK_DIR}") {
+          sh '''
+            set -eu
+            set -a; . ./.env; set +a
+            COMPOSE="docker compose -f docker-compose.yml -f docker-compose.cloud.yml -f docker-compose.observability.yml"
+            $COMPOSE pull "${SERVICE_NAME}"
+            $COMPOSE up -d --no-build "${SERVICE_NAME}"
+          '''
+        }
+      }
+    }
+    // Smoke en red host (los puertos del stack publican en 127.0.0.1 del VPS,
+    // inalcanzables desde la red del contenedor de Jenkins).
+    stage('Smoke') {
+      steps {
+        dir("${STACK_DIR}") {
+          sh '''
+            set -eu
+            set -a; . ./.env; set +a
+            docker run --rm --network host \\
+              --entrypoint bash \\
+              --env-file .env \\
+              -v "${STACK_DIR}/scripts:/scripts:ro" \\
+              "${REGISTRY}/jenkins:local" \\
+              -c 'cd /scripts && ./wait-for-services.sh && ./smoke.sh'
+          '''
+        }
+      }
+    }
+  }
+  post {
+    failure {
+      echo "Deploy fallido: ${env.SERVICE_NAME} @ ${env.COMMIT_SHA}. " +
+           "Rollback: TAG=<sha-sano> y docker compose up -d --no-build ${env.SERVICE_NAME} " +
+           "desde ${env.STACK_DIR} (ver docs-ea-control/10-devops/ci-cd.md)."
+    }
+  }
+}
