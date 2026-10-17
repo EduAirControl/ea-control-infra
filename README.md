@@ -70,12 +70,12 @@ Requisito: los repositorios de los servicios clonados como hermanos de `infra/`
 | RabbitMQ | 5672 | 5672 |
 | RabbitMQ (panel) | 15672 | 15672 |
 | Redis | 6379 | 6379 |
-
-Credenciales por defecto del superadmin: `admin@eduaircontrol.com` / `EduAirControl1!`
-(configurable en `.env` como `SUPERADMIN_PASSWORD`; cámbiala antes de cualquier despliegue).
-| Redis | 6379 | 6379 |
 | Prometheus | 9090 | 9090 |
 | Grafana | 3001 | 3000 |
+
+Cuenta SUPER_ADMIN sembrada al arrancar: `admin@eduaircontrol.com` con
+`SUPERADMIN_PASSWORD` — **obligatoria en `.env`** (sin default; compose falla sin ella,
+R-002). Genera una contraseña fuerte y guárdala en tu gestor de contraseñas.
 
 ## Despliegue en producción (Kubernetes)
 
