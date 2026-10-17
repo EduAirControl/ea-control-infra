@@ -71,7 +71,9 @@ services:
       REDIS_PORT: 6379
       SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-admin@eduaircontrol.com}
       SUPERADMIN_USERNAME: ${SUPERADMIN_USERNAME:-superadmin}
-      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-EduAirControl1!}
+      # Sin default: arrancar con la contraseña documentada en el repo es un
+      # riesgo (R-002). Definela en .env (ver .env.example).
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:?SUPERADMIN_PASSWORD is required (set it in infra/.env)}
       # Correo SMTP (recuperación de contraseña). Con SMTP_HOST vacío el código
       # se registra en el log en lugar de enviarse. En dev usa mailpit:1025.
       SMTP_HOST: ${SMTP_HOST:-}

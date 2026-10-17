@@ -10,7 +10,8 @@ set -euo pipefail
 
 GATEWAY="${GATEWAY_URL:-http://localhost:8080}"
 SUPERADMIN_EMAIL="${SUPERADMIN_EMAIL:-admin@eduaircontrol.com}"
-SUPERADMIN_PASSWORD="${SUPERADMIN_PASSWORD:-EduAirControl1!}"
+# Obligatorio (R-002): la password por defecto documentada en el repo dejo de existir.
+SUPERADMIN_PASSWORD="${SUPERADMIN_PASSWORD:?Set SUPERADMIN_PASSWORD (infra/.env) before running smoke}"
 SUFFIX="$(date +%s)"
 EMAIL="smoke-${SUFFIX}@example.com"
 CONFIG_CODE="SMK-$(printf '%04d' $((SUFFIX % 10000)))"
