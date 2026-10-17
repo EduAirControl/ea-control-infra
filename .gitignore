@@ -1,5 +1,9 @@
 .env
 
+# Ajustes por maquina: rutas de build y puertos que chocan con servicios del host.
+# Docker Compose lo fusiona solo sobre docker-compose.yml.
+docker-compose.override.yml
+
 # Claves RSA de cada entorno (generadas en el despliegue; nunca commitear)
 secrets/
 
