@@ -1,0 +1,44 @@
+# CI/CD — Jenkins LTS (ADR-019). Overlay opcional: solo entorno cloud/VPS.
+#
+# Uso (VPS, junto a los overlays base y cloud):
+#   docker compose -f docker-compose.yml -f docker-compose.cloud.yml \
+#                   -f docker-compose.observability.yml \
+#                   -f docker-compose.jenkins.yml up -d --build jenkins
+#
+# - Monta el docker.sock del host: Jenkins construye/pushea imágenes y
+#   orquesta `docker compose pull/up` del stack (Fase de deploy del pipeline).
+# - El directorio del stack del VPS (/opt/eduaircontrol) se monta en RO para
+#   que el pipeline lea .env, secrets/ y ejecute los scripts de smoke.
+# - El puerto solo escucha en 127.0.0.1: se accede por Caddy
+#   (jenkins.eduaircontrol.tech) o por túnel SSH (localhost:8085).
+# - Concurrency de builds = 1 la gestionan los jobs (disableConcurrentBuilds):
+#   el VPS tiene 8 GB y también sirve el stack.
+
+services:
+  jenkins:
+    build: ./jenkins
+    image: ${REGISTRY:-eduaircontrol}/jenkins:local
+    container_name: ea-control-jenkins
+    restart: unless-stopped
+    mem_limit: 1024m
+    # root para escribir en /var/run/docker.sock del host (MVP; ver README).
+    user: root
+    environment:
+      JAVA_OPTS: >-
+        -Xmx768m
+        -Djava.awt.headless=true
+      # Testcontainers en Docker-outside-of-Docker (los tests de
+      # ms-environment-monitoring y ms-user-experience usan el sock del host):
+      # el host se alcanza como host.docker.internal, no como "localhost".
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${JENKINS_PORT:-8085}:8080"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/eduaircontrol:/opt/eduaircontrol:ro
+
+volumes:
+  jenkins_home:

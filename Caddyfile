@@ -1,0 +1,45 @@
+# EduAirControl — entorno de pruebas (eduaircontrol.tech)
+# TLS automatico con Let's Encrypt (HTTP-01; requiere los A records de
+# eduaircontrol.tech (apex), api.eduaircontrol.tech y grafana.eduaircontrol.tech
+# apuntando al VPS).
+
+# Web en el dominio raiz.
+eduaircontrol.tech {
+	encode gzip
+	reverse_proxy web:80
+}
+
+# El subdominio app. redirige al dominio raiz (compatibilidad).
+app.eduaircontrol.tech {
+	redir https://eduaircontrol.tech{uri} permanent
+}
+
+api.eduaircontrol.tech {
+	encode gzip
+
+	# Endpoints del Authorization Server (Spring Authorization Server en
+	# ms-security). El navegador debe alcanzarlos por la URL publica durante el
+	# flujo BFF OAuth2; nota: /oauth2/authorization/** y /login/oauth2/code/**
+	# son del cliente OAuth2 del gateway y NO caen en este matcher.
+	@as_endpoints path /login /oauth2/authorize* /oauth2/token* /oauth2/jwks* /oauth2/userinfo* /.well-known/openid-configuration /.well-known/webfinger
+	handle @as_endpoints {
+		reverse_proxy ms-security:8081
+	}
+
+	handle {
+		reverse_proxy api-gateway:8080
+	}
+}
+
+grafana.eduaircontrol.tech {
+	encode gzip
+	reverse_proxy grafana:3000
+}
+
+# Jenkins CI/CD (ADR-019). Requiere el registro A jenkins.eduaircontrol.tech
+# apuntando al VPS. La autenticacion (usuario/contrasena del admin creado en el
+# arranque inicial) y el CSRF los lleva el propio Jenkins.
+jenkins.eduaircontrol.tech {
+	encode gzip
+	reverse_proxy jenkins:8080
+}

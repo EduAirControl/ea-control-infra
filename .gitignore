@@ -1,6 +1,23 @@
 .env
 
+# Ajustes por maquina: rutas de build y puertos que chocan con servicios del host.
+# Docker Compose lo fusiona solo sobre docker-compose.yml.
+docker-compose.override.yml
+
+# Claves RSA de cada entorno (generadas en el despliegue; nunca commitear)
+secrets/
+
 # Instrucciones locales de agentes IA (no se comparten con el equipo)
 AGENTS.md
 opencode.json
 .opencode/
+
+# Firmware ESP32 (PlatformIO): artefactos de compilacion
+iot/**/.pio/
+iot/**/dist/
+iot/**/.vscode/
+
+# Runbook de despliegue y evidencias (uso interno, con capturas y credenciales redactadas)
+RUNBOOK-DESPLIEGUE.md
+RUNBOOK-DESPLIEGUE.pdf
+docs-evidencias/

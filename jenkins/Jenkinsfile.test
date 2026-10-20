@@ -1,0 +1,79 @@
+// Tests de un repositorio (ADR-019). Lo ejecuta el job test-<servicio>
+// definido en jobs.groovy; se activa con un webhook de push a develop/main.
+//
+// Variables que inyecta Generic Webhook Trigger (parámetros del job):
+//   REPO_URL     — clone URL del repositorio que ha hecho push
+//   COMMIT_SHA   — commit exacto a verificar
+//   REF          — refs/heads/<rama>
+// SERVICE_NAME se deriva del nombre del job (test-<servicio>).
+def notifyDiscord
+pipeline {
+  agent any
+  options {
+    timestamps()
+    disableConcurrentBuilds(abortPrevious: true)
+    buildDiscarder(logRotator(numToKeepStr: '30'))
+  }
+  stages {
+    stage('Setup') {
+      steps {
+        script {
+          env.SERVICE_NAME = env.JOB_NAME.replaceFirst('^test-', '')
+          // El workspace inicial es ea-control-infra: cargar aqui la lib de
+          // notificacion ANTES del checkout del servicio (lo sobrescribe).
+          notifyDiscord = load 'jenkins/notifyDiscord.groovy'
+        }
+      }
+    }
+    stage('Checkout') {
+      steps {
+        checkout([$class: 'Git',
+                  url: "${REPO_URL}",
+                  branches: [[name: "${COMMIT_SHA}"]],
+                  extensions: [[$class: 'CloneOption', shallow: false, depth: 1, noTags: true]]])
+      }
+    }
+    stage('Verify') {
+      steps {
+        script {
+          if (env.SERVICE_NAME == 'web') {
+            dir('apps/web') {
+              sh 'npm ci'
+              sh 'npm run build'
+            }
+          } else {
+            sh 'chmod +x ./mvnw'
+            sh './mvnw -B -ntp verify'
+          }
+        }
+      }
+    }
+    // En main, tras tests verdes, se despliega (deploy encadenado).
+    stage('Deploy gate (main)') {
+      when { environment name: 'REF', value: 'refs/heads/main' }
+      steps {
+        build job: "deploy-${env.SERVICE_NAME}",
+              wait: true,
+              parameters: [
+                string(name: 'REPO_URL', value: "${env.REPO_URL}"),
+                string(name: 'COMMIT_SHA', value: "${env.COMMIT_SHA}"),
+                string(name: 'SERVICE_NAME', value: "${env.SERVICE_NAME}")
+              ]
+      }
+    }
+  }
+  post {
+    always {
+      script {
+        notifyDiscord.call(fields: [
+          Servicio: env.SERVICE_NAME,
+          Rama:     env.REF?.replaceFirst('^refs/heads/', ''),
+          Commit:   env.COMMIT_SHA?.take(7),
+          Duracion: currentBuild.durationString
+        ])
+      }
+    }
+    failure { echo "Tests fallidos: ${env.SERVICE_NAME} @ ${env.COMMIT_SHA} (${env.REPO_URL})" }
+    fixed   { echo "Tests recuperados: ${env.SERVICE_NAME} @ ${env.COMMIT_SHA}" }
+  }
+}

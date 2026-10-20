@@ -1,0 +1,18 @@
+# Panel de administración de contenedores (opcional, operación).
+# Uso: docker compose -f docker-compose.yml -f docker-compose.observability.yml \
+#        -f docker-compose.cloud.yml -f docker-compose.ops.yml up -d
+# Acceso: https://127.0.0.1:9443 via SSH tunnel (nunca expuesto a Internet).
+
+services:
+  portainer:
+    image: portainer/portainer-ce:lts
+    container_name: ea-control-portainer
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+
+volumes:
+  portainer_data:
