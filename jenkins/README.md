@@ -71,7 +71,7 @@ La concurrencia (=1) no se fija aquí: la gestionan los propios jobs con
 - Líneas 25-34: mapa `services` de 8 entradas `[name, repo]`. Excepciones del
   patrón de nombres de GitHub (comentadas en líneas 6-10):
   - `ms-environment-monitoring` — sin prefijo `ea-control-`.
-  - `-ms-user-experience` — guion inicial en el nombre.
+  - `ms-user-experience` — renombrado recientemente desde `-ms-user-experience`.
   - `ea-control-frontend` → servicio `web` (la app vive en `apps/web`).
 - Línea 36: `services.each { svc -> ... }` → **itera una vez por servicio** y
   dentro crea dos jobs:

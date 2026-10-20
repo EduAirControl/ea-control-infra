@@ -6,7 +6,7 @@
 // Mapeo repo <-> servicio (los remotos de GitHub NO siguen un patron):
 //   ea-control-<servicio>   para la mayoria
 //   ms-environment-monitoring              (sin prefijo ea-control-)
-//   -ms-user-experience                    (guion inicial en el nombre)
+//   ms-user-experience                     (renombrado desde -ms-user-experience)
 //   ea-control-frontend   -> servicio "web" (la app vive en apps/web)
 //
 // Webhook por repositorio (solo evento push):
@@ -29,7 +29,7 @@ def services = [
   [name: 'ms-sensor-management',      repo: 'https://github.com/EduAirControl/ea-control-ms-sensor-management.git'],
   [name: 'ms-user-management',        repo: 'https://github.com/EduAirControl/ea-control-ms-user-management.git'],
   [name: 'ms-environment-monitoring', repo: 'https://github.com/EduAirControl/ms-environment-monitoring.git'],
-  [name: 'ms-user-experience',        repo: 'https://github.com/EduAirControl/-ms-user-experience.git'],
+  [name: 'ms-user-experience',        repo: 'https://github.com/EduAirControl/ea-control-ms-user-experience.git'],
   [name: 'web',                       repo: 'https://github.com/EduAirControl/ea-control-frontend.git'],
 ]
 
