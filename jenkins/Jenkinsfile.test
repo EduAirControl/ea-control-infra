@@ -6,7 +6,9 @@
 //   COMMIT_SHA   — commit exacto a verificar
 //   REF          — refs/heads/<rama>
 // SERVICE_NAME se deriva del nombre del job (test-<servicio>).
-def notifyDiscord
+//
+// Nota: el checkout usa el FQN de GitSCM y la URL en userRemoteConfigs
+// (en este core el lookup por nombre corto "Git" resuelve null).
 pipeline {
   agent any
   options {
@@ -19,18 +21,16 @@ pipeline {
       steps {
         script {
           env.SERVICE_NAME = env.JOB_NAME.replaceFirst('^test-', '')
-          // El workspace inicial es ea-control-infra: cargar aqui la lib de
-          // notificacion ANTES del checkout del servicio (lo sobrescribe).
-          notifyDiscord = load 'jenkins/notifyDiscord.groovy'
         }
       }
     }
     stage('Checkout') {
       steps {
-        checkout([$class: 'Git',
-                  url: "${REPO_URL}",
+        checkout([$class: 'hudson.plugins.git.GitSCM',
+                  userRemoteConfigs: [[url: "${REPO_URL}"]],
                   branches: [[name: "${COMMIT_SHA}"]],
-                  extensions: [[$class: 'CloneOption', shallow: false, depth: 1, noTags: true]]])
+                  extensions: [[$class: 'hudson.plugins.git.extensions.impl.CloneOption',
+                                shallow: false, depth: 1, noTags: true]]])
       }
     }
     stage('Verify') {
@@ -63,14 +63,39 @@ pipeline {
     }
   }
   post {
+    // Notificacion a Discord inline (sin libreria cargada: el load en un
+    // stage no deja la referencia disponible en post bajo CPS declarativo).
     always {
       script {
-        notifyDiscord.call(fields: [
-          Servicio: env.SERVICE_NAME,
-          Rama:     env.REF?.replaceFirst('^refs/heads/', ''),
-          Commit:   env.COMMIT_SHA?.take(7),
-          Duracion: currentBuild.durationString
-        ])
+        try {
+          def status = currentBuild.currentResult ?: 'UNKNOWN'
+          def color  = [SUCCESS: 3066993, FAILURE: 15158332, UNSTABLE: 16776960, ABORTED: 9807270].get(status, 9807270)
+          def emoji  = [SUCCESS: '✅', FAILURE: '❌', UNSTABLE: '⚠️', ABORTED: '⏹'].get(status, '❓')
+          def fields = [
+            [name: 'Servicio', value: (env.SERVICE_NAME ?: '—').toString().take(1024), inline: true],
+            [name: 'Rama',     value: (env.REF ?: '—').replaceFirst('^refs/heads/', '').toString().take(1024), inline: true],
+            [name: 'Commit',   value: (env.COMMIT_SHA ?: '—').take(7), inline: true],
+            [name: 'Duracion', value: currentBuild.durationString, inline: true]
+          ]
+          def payload = groovy.json.JsonOutput.toJson([
+            username: 'Jenkins CI',
+            embeds: [[
+              title:     "${emoji} ${env.JOB_NAME} #${env.BUILD_NUMBER} — ${status}",
+              url:       env.BUILD_URL,
+              color:     color,
+              fields:    fields,
+              footer:    [text: env.BUILD_URL ?: ''],
+              timestamp: new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))
+            ]]
+          ])
+          withCredentials([string(credentialsId: 'discord-webhook', variable: 'DISCORD_WEBHOOK')]) {
+            writeFile file: 'discord-notify.json', text: payload
+            sh 'curl -sS -m 20 -X POST -H "Content-Type: application/json" ' +
+               '-d @discord-notify.json "$DISCORD_WEBHOOK" > /dev/null || true'
+          }
+        } catch (e) {
+          echo "No se pudo notificar a Discord: ${e.message}"
+        }
       }
     }
     failure { echo "Tests fallidos: ${env.SERVICE_NAME} @ ${env.COMMIT_SHA} (${env.REPO_URL})" }
