@@ -27,12 +27,14 @@ pipeline {
     }
     stage('Checkout') {
       steps {
-        // FQN en $class: el lookup por nombre corto "Git" no resuelve en este
-        // core/Jenkins (getDescriptor('Git') -> null); por FQN sí.
+        // FQN en $class: el lookup por nombre corto no resuelve en este core.
+        // La URL va en userRemoteConfigs (el alias top-level "url" no aplica
+        // con FQN) y CloneOption tambien por FQN.
         checkout([$class: 'hudson.plugins.git.GitSCM',
-                  url: "${REPO_URL}",
+                  userRemoteConfigs: [[url: "${REPO_URL}"]],
                   branches: [[name: "${COMMIT_SHA}"]],
-                  extensions: [[$class: 'CloneOption', shallow: false, depth: 1, noTags: true]]])
+                  extensions: [[$class: 'hudson.plugins.git.extensions.impl.CloneOption',
+                                shallow: false, depth: 1, noTags: true]]])
       }
     }
     stage('Verify') {
