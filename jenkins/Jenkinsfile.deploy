@@ -27,7 +27,9 @@ pipeline {
     }
     stage('Checkout') {
       steps {
-        checkout([$class: 'Git',
+        // FQN en $class: el lookup por nombre corto "Git" no resuelve en este
+        // core/Jenkins (getDescriptor('Git') -> null); por FQN sí.
+        checkout([$class: 'hudson.plugins.git.GitSCM',
                   url: "${REPO_URL}",
                   branches: [[name: "${COMMIT_SHA}"]],
                   extensions: [[$class: 'CloneOption', shallow: false, depth: 1, noTags: true]]])
