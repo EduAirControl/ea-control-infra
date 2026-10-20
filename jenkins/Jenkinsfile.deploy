@@ -4,6 +4,7 @@
 //
 // Repositorio ya testeado; aqui solo importa el artefacto (imagen inmutable
 // etiquetada con el SHA + latest).
+def notifyDiscord
 pipeline {
   agent any
   options {
@@ -15,6 +16,15 @@ pipeline {
     STACK_DIR = '/opt/eduaircontrol/infra'
   }
   stages {
+    stage('Setup') {
+      steps {
+        script {
+          // El workspace inicial es ea-control-infra: cargar aqui la lib de
+          // notificacion ANTES del checkout del servicio (lo sobrescribe).
+          notifyDiscord = load 'jenkins/notifyDiscord.groovy'
+        }
+      }
+    }
     stage('Checkout') {
       steps {
         checkout([$class: 'Git',
@@ -95,6 +105,16 @@ pipeline {
     }
   }
   post {
+    always {
+      script {
+        notifyDiscord.call(fields: [
+          Servicio: env.SERVICE_NAME,
+          Commit:   env.COMMIT_SHA?.take(7),
+          Imagen:   "ea-control-${env.SERVICE_NAME}:${env.COMMIT_SHA}",
+          Duracion: currentBuild.durationString
+        ])
+      }
+    }
     failure {
       echo "Deploy fallido: ${env.SERVICE_NAME} @ ${env.COMMIT_SHA}. " +
            "Rollback: TAG=<sha-sano> y docker compose up -d --no-build ${env.SERVICE_NAME} " +

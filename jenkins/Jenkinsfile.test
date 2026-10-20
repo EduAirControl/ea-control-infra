@@ -6,6 +6,7 @@
 //   COMMIT_SHA   — commit exacto a verificar
 //   REF          — refs/heads/<rama>
 // SERVICE_NAME se deriva del nombre del job (test-<servicio>).
+def notifyDiscord
 pipeline {
   agent any
   options {
@@ -18,6 +19,9 @@ pipeline {
       steps {
         script {
           env.SERVICE_NAME = env.JOB_NAME.replaceFirst('^test-', '')
+          // El workspace inicial es ea-control-infra: cargar aqui la lib de
+          // notificacion ANTES del checkout del servicio (lo sobrescribe).
+          notifyDiscord = load 'jenkins/notifyDiscord.groovy'
         }
       }
     }
@@ -59,6 +63,16 @@ pipeline {
     }
   }
   post {
+    always {
+      script {
+        notifyDiscord.call(fields: [
+          Servicio: env.SERVICE_NAME,
+          Rama:     env.REF?.replaceFirst('^refs/heads/', ''),
+          Commit:   env.COMMIT_SHA?.take(7),
+          Duracion: currentBuild.durationString
+        ])
+      }
+    }
     failure { echo "Tests fallidos: ${env.SERVICE_NAME} @ ${env.COMMIT_SHA} (${env.REPO_URL})" }
     fixed   { echo "Tests recuperados: ${env.SERVICE_NAME} @ ${env.COMMIT_SHA}" }
   }
