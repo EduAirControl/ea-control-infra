@@ -16,3 +16,8 @@ opencode.json
 iot/**/.pio/
 iot/**/dist/
 iot/**/.vscode/
+
+# Runbook de despliegue y evidencias (uso interno, con capturas y credenciales redactadas)
+RUNBOOK-DESPLIEGUE.md
+RUNBOOK-DESPLIEGUE.pdf
+docs-evidencias/
