@@ -18,4 +18,11 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
  && rm -rf /var/lib/apt/lists/*
 
+# Node 22 LTS — los jobs test-web ejecutan `npm ci` + `npm run build` de
+# apps/web (el build de la imagen del deploy si usa el Dockerfile de la app,
+# que ya trae su propio node en la etapa builder).
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+ && apt-get install -y --no-install-recommends nodejs \
+ && rm -rf /var/lib/apt/lists/*
+
 USER jenkins
