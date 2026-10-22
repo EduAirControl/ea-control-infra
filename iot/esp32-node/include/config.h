@@ -96,6 +96,7 @@
 #define HTTP_TIMEOUT_MS          10000
 #define WIFI_CONNECT_TIMEOUT_MS  20000
 #define BLE_PROVISION_TIMEOUT_MS 300000  // 5 min esperando provisioning
+#define WIFI_REPROVISION_AFTER_MS 60000   // 60 s sin Wi-Fi -> volver a publicar BLE
 
 // ─────────────────────────────────────────────────────────────
 // BLE PROVISIONING (contrato de guia_configuracion_esp32_react_native_ble.md)

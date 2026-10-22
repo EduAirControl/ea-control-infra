@@ -35,6 +35,10 @@ services:
       REDIS_PORT: 6379
       AUTH_URI: http://ms-security:8081
       AUTH_JWKS_URI: http://ms-security:8081/api/v1/auth/jwks
+      # Endurecimiento JWT: el gateway exige estos iss/aud (deben coincidir
+      # con los que emite ms-security en la misma red).
+      AUTH_ISSUER: ${AUTH_ISSUER:-http://ms-security:8081}
+      AUTH_AUDIENCE: ${AUTH_AUDIENCE:-eduaircontrol-api}
       CLASSROOM_URI: http://ms-classroom-management:3002
       SENSOR_URI: http://ms-sensor-management:3004
       MONITORING_URI: http://ms-environment-monitoring:3003
@@ -87,6 +91,9 @@ services:
       # de dispositivo (ESP32) quedan invalidos con un 401 silencioso.
       SECURITY_RSA_PRIVATE_KEY_PATH: /app/keys/test-private.pem
       SECURITY_RSA_PUBLIC_KEY_PATH: /app/keys/test-public.pem
+      # iss/aud de los access tokens; el gateway los exige (AUTH_ISSUER/AUD).
+      APP_SECURITY_ISSUER: ${AUTH_ISSUER:-http://ms-security:8081}
+      APP_SECURITY_AUDIENCE: ${AUTH_AUDIENCE:-eduaircontrol-api}
     volumes:
       - ./secrets/test-private.pem:/app/keys/test-private.pem:ro
       - ./secrets/test-public.pem:/app/keys/test-public.pem:ro

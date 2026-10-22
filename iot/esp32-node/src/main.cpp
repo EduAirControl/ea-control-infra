@@ -38,6 +38,7 @@ static DHT dht(DHT11_PIN, DHT_TYPE);
 static unsigned long bootMs = 0;
 static unsigned long lastReadMs = 0;
 static bool bleRunning = false;
+static unsigned long wifiDownSince = 0;
 // El backend contesta 410 cuando la instalacion fue desvinculada o purgada: ya no
 // existe y no volvera a aceptar datos. Se corta el envio para no spamear la API.
 static bool installationGone = false;
@@ -346,8 +347,10 @@ void setup() {
         Serial.println("[BLE] sin credenciales: hay que provisionar");
     }
 
-    // Sin credenciales completas siempre se puede reprovisionar.
-    if (!readyToReport()) {
+    // Se ofrece BLE si falta configurar O si el Wi-Fi no pudo conectar: sin lo
+    // segundo, credenciales guardadas invalidas dejan el nodo en un limbo mudo
+    // (reconectando para siempre sin anunciar ESP32_Config).
+    if (!readyToReport() || WiFi.status() != WL_CONNECTED) {
         startProvisioning();
     }
 
@@ -363,17 +366,33 @@ void loop() {
     }
 
     if (bleRunning) {
+        // Si mientras tanto volvio el Wi-Fi con credenciales completas, se retira
+        // el BLE (igual que pendingStopBle tras un provisioning exitoso).
+        if (WiFi.status() == WL_CONNECTED && readyToReport() && !installationGone) {
+            Serial.println("[BLE] credenciales completas y en linea: retiro el BLE");
+            stopProvisioning();
+            delay(100);
+            return;
+        }
         // Mientras se provisiona no se mide: evita enviar con credenciales a medias.
         delay(100);
         return;
     }
 
     if (WiFi.status() != WL_CONNECTED) {
+        if (wifiDownSince == 0) wifiDownSince = millis();
+        if (millis() - wifiDownSince >= WIFI_REPROVISION_AFTER_MS) {
+            Serial.println("[WIFI] 60 s sin conexion: vuelvo a ofrecer ESP32_Config");
+            wifiDownSince = 0;
+            startProvisioning();
+            return;
+        }
         Serial.println("[WIFI] desconectado, reintentando...");
         WiFi.reconnect();
         delay(5000);
         return;
     }
+    wifiDownSince = 0;
 
     if (!readyToReport()) {
         startProvisioning();
