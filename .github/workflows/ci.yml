@@ -1,0 +1,18 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+jobs:
+  compose:
+    name: validate docker compose
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate docker-compose.yml
+        env:
+          SUPERADMIN_PASSWORD: ci-placeholder
+        run: docker compose -f docker-compose.yml --env-file .env.example config -q
