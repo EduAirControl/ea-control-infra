@@ -17,6 +17,7 @@ infra/
 ├── docker-compose.observability.yml # Prometheus + Grafana + OTel Collector (overlay opcional)
 ├── .env.example                     # Variables del stack
 ├── scripts/
+│   ├── clone-all.sh                 # Clona los repos hermanos con los nombres del compose
 │   ├── wait-for-services.sh         # Espera a que los 8 servicios respondan
 │   └── smoke.sh                     # Smoke end-to-end a través del gateway
 ├── deploy/k8s/                      # Manifiestos de producción
@@ -33,13 +34,19 @@ infra/
 ├── docker-compose.jenkins.yml       # Overlay CI/CD: Jenkins (ADR-019)
 ├── jenkins/                         # Dockerfile + jobs.groovy + Jenkinsfile.test/deploy + seed
 ├── Caddyfile                        # TLS: app/api/grafana/jenkins.eduaircontrol.tech
-└── .github/workflows/build-services.yml  # GitHub Actions (se retira tras el 1er deploy verde, ADR-019)
+└── .github/workflows/ci.yml         # Check de PR (validacion de compose); el deploy lo hace Jenkins (ADR-019)
 ```
 
 ## Arranque local
 
-Requisito: los repositorios de los servicios clonados como hermanos de `infra/`
-(el compose construye con `build: ../<servicio>` y `build: ../ea-control-frontend/apps/web`).
+Requisito: los repositorios clonados como hermanos de `infra/`, **con sus nombres
+reales** (el compose construye con `build: ../ea-control-<servicio>` y
+`build: ../ea-control-frontend/apps/web`). El script `scripts/clone-all.sh` los
+clona con esos nombres:
+
+```bash
+./scripts/clone-all.sh   # clona los 8 repos hermanos con los nombres del compose
+```
 
 ```bash
 ./up.sh              # crea .env si falta, construye, levanta y espera a que todo responda
@@ -117,6 +124,9 @@ docker exec ea-control-jenkins cat /var/jenkins_home/secrets/initialAdminPasswor
   `deploy-<svc>`: build → GHCR → `compose pull/up` → smoke.
 - Credenciales Jenkins: `github-infra` (clone de este repo) y `ghcr-bot` (push GHCR).
 - Tras el primer deploy verde se borra `.github/workflows/build-services.yml`.
+- Además, cada repo tiene un check de PR de GitHub Actions (`.github/workflows/ci.yml`):
+  `./mvnw verify` (o validación de compose en `infra`). Es solo verificación; no despliega
+  (ver nota en ADR-019).
 
 ## Observabilidad
 
