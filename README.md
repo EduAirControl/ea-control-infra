@@ -17,6 +17,7 @@ infra/
 ├── docker-compose.observability.yml # Prometheus + Grafana + OTel Collector (overlay opcional)
 ├── .env.example                     # Variables del stack
 ├── scripts/
+│   ├── clone-all.sh                 # Clones the sibling repos with the compose names
 │   ├── wait-for-services.sh         # Espera a que los 8 servicios respondan
 │   └── smoke.sh                     # Smoke end-to-end a través del gateway
 ├── deploy/k8s/                      # Manifiestos de producción
@@ -33,13 +34,19 @@ infra/
 ├── docker-compose.jenkins.yml       # Overlay CI/CD: Jenkins (ADR-019)
 ├── jenkins/                         # Dockerfile + jobs.groovy + Jenkinsfile.test/deploy + seed
 ├── Caddyfile                        # TLS: app/api/grafana/jenkins.eduaircontrol.tech
-└── .github/workflows/build-services.yml  # GitHub Actions (se retira tras el 1er deploy verde, ADR-019)
+└── .github/workflows/ci.yml         # PR check (compose validation); deploy runs on Jenkins (ADR-019)
 ```
 
 ## Arranque local
 
-Requisito: los repositorios de los servicios clonados como hermanos de `infra/`
-(el compose construye con `build: ../<servicio>` y `build: ../ea-control-frontend/apps/web`).
+Requirement: the repositories cloned as siblings of `infra/`, **with their real
+names** (the compose builds with `build: ../ea-control-<service>` and
+`build: ../ea-control-frontend/apps/web`). The `scripts/clone-all.sh` helper clones
+them with those names:
+
+```bash
+./scripts/clone-all.sh   # clones the 8 sibling repos with the compose names
+```
 
 ```bash
 ./up.sh              # crea .env si falta, construye, levanta y espera a que todo responda
@@ -116,7 +123,10 @@ docker exec ea-control-jenkins cat /var/jenkins_home/secrets/initialAdminPasswor
 - `test-<svc>` en cada push a `develop`/`main`; en `main` verde encadena
   `deploy-<svc>`: build → GHCR → `compose pull/up` → smoke.
 - Credenciales Jenkins: `github-infra` (clone de este repo) y `ghcr-bot` (push GHCR).
-- Tras el primer deploy verde se borra `.github/workflows/build-services.yml`.
+- After the first green deploy, `.github/workflows/build-services.yml` is deleted.
+- Each repo also has a GitHub Actions PR check (`.github/workflows/ci.yml`):
+  `./mvnw verify` (or compose validation in `infra`). It is verification only and does
+  not deploy (see the note in ADR-019).
 
 ## Observabilidad
 

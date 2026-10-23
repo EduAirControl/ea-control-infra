@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
 
   api-gateway:
-    build: ../api-gateway
+    build: ../ea-control-api-gateway
     image: ${REGISTRY:-eduaircontrol}/ea-control-api-gateway:${TAG:-local}
     container_name: api-gateway
     ports:
@@ -61,7 +61,7 @@ services:
     restart: unless-stopped
 
   ms-security:
-    build: ../ms-security
+    build: ../ea-control-ms-security
     image: ${REGISTRY:-eduaircontrol}/ea-control-ms-security:${TAG:-local}
     container_name: ms-security
     ports:
@@ -142,7 +142,7 @@ services:
     restart: unless-stopped
 
   ms-classroom-management:
-    build: ../ms-classroom-management
+    build: ../ea-control-ms-classroom-management
     image: ${REGISTRY:-eduaircontrol}/ea-control-ms-classroom-management:${TAG:-local}
     container_name: ms-classroom-management
     ports:
@@ -172,7 +172,7 @@ services:
     restart: unless-stopped
 
   ms-sensor-management:
-    build: ../ms-sensor-management
+    build: ../ea-control-ms-sensor-management
     image: ${REGISTRY:-eduaircontrol}/ea-control-ms-sensor-management:${TAG:-local}
     container_name: ms-sensor-management
     ports:
@@ -202,7 +202,7 @@ services:
     restart: unless-stopped
 
   ms-user-management:
-    build: ../ms-user-management
+    build: ../ea-control-ms-user-management
     image: ${REGISTRY:-eduaircontrol}/ea-control-ms-user-management:${TAG:-local}
     container_name: ms-user-management
     ports:
@@ -226,7 +226,7 @@ services:
     restart: unless-stopped
 
   ms-user-experience:
-    build: ../ms-user-experience
+    build: ../ea-control-ms-user-experience
     image: ${REGISTRY:-eduaircontrol}/ea-control-ms-user-experience:${TAG:-local}
     container_name: ms-user-experience
     ports:
