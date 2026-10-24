@@ -30,6 +30,13 @@ if [ ! -f .env ]; then
   cp .env.example .env
 fi
 
+# Claves RSA de desarrollo de ms-security (gitignored): el stack las monta desde
+# ./secrets. Se generan si faltan para que un clon nuevo levante sin pasos extra.
+if [ ! -s secrets/test-private.pem ] || [ ! -s secrets/test-public.pem ]; then
+  echo "Generando claves RSA de desarrollo (infra/secrets)..."
+  ./scripts/gen-dev-keys.sh
+fi
+
 # Aviso si hay contenedores de los compose por servicio sueltos.
 stray=$(docker ps --format '{{.Names}}' | grep -E '^(api-gateway-redis|ms-[a-z-]+-db|ms-[a-z-]+-rabbit)$' || true)
 if [ -n "$stray" ]; then
