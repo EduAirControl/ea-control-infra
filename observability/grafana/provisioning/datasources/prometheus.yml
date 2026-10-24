@@ -1,0 +1,12 @@
+# DataSource de Grafana provisionado como codigo (ADR-012).
+# Apunta al Prometheus del overlay de observabilidad (misma red docker).
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
