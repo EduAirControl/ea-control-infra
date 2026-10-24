@@ -94,6 +94,17 @@ services:
       # iss/aud de los access tokens; el gateway los exige (AUTH_ISSUER/AUD).
       APP_SECURITY_ISSUER: ${AUTH_ISSUER:-http://ms-security:8081}
       APP_SECURITY_AUDIENCE: ${AUTH_AUDIENCE:-eduaircontrol-api}
+      # Login social (Google / Facebook). Sin credenciales los botones responden
+      # auth_failed. SOCIAL_CALLBACK_BASE_URL debe ser la URL PUBLICA (https) que
+      # el proveedor pueda alcanzar; el redirect URI registrado es
+      # <base>/api/v1/auth/oauth2/<proveedor>/callback.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      FACEBOOK_CLIENT_ID: ${FACEBOOK_CLIENT_ID:-}
+      FACEBOOK_CLIENT_SECRET: ${FACEBOOK_CLIENT_SECRET:-}
+      SOCIAL_CALLBACK_BASE_URL: ${SOCIAL_CALLBACK_BASE_URL:-}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      OAUTH2_ISSUER: ${OAUTH2_ISSUER:-http://localhost:8081}
     volumes:
       - ./secrets/test-private.pem:/app/keys/test-private.pem:ro
       - ./secrets/test-public.pem:/app/keys/test-public.pem:ro
