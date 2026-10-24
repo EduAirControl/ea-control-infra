@@ -56,6 +56,10 @@ them with those names:
 
 `up.sh --no-build` reutiliza las imágenes que ya haya construidas.
 
+`up.sh` also generates the ms-security **development RSA keypair** into `infra/secrets/`
+(gitignored) when it is missing; run `./scripts/gen-dev-keys.sh` to generate it on its own.
+These keys are for local use only and must never be reused in production.
+
 > **No mezcles composes.** Los `docker-compose.yml` de cada servicio y el de
 > `api-gateway/docker-compose.yml` existen para trabajar un servicio aislado.
 > Usarlos a la vez que este stack falla: compiten por nombres de contenedor y

@@ -101,9 +101,9 @@ spec:
                   name: eduaircontrol-secrets
                   key: SECURITY_PASSWORD
             - name: SECURITY_RSA_PRIVATE_KEY_PATH
-              value: /app/keys/dev-private.pem
+              value: /app/keys/jwt-private.pem
             - name: SECURITY_RSA_PUBLIC_KEY_PATH
-              value: /app/keys/dev-public.pem
+              value: /app/keys/jwt-public.pem
             - name: SUPERADMIN_EMAIL
               valueFrom:
                 secretKeyRef:
@@ -150,10 +150,10 @@ spec:
           secret:
             secretName: eduaircontrol-secrets
             items:
-              - key: dev-private.pem
-                path: dev-private.pem
-              - key: dev-public.pem
-                path: dev-public.pem
+              - key: jwt-private.pem
+                path: jwt-private.pem
+              - key: jwt-public.pem
+                path: jwt-public.pem
 ---
 apiVersion: v1
 kind: Service
