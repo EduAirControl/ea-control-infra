@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
 
   api-gateway:
-    build: ../api-gateway
+    build: ../ea-control-api-gateway
     image: ${REGISTRY:-eduaircontrol}/ea-control-api-gateway:${TAG:-local}
     container_name: api-gateway
     ports:
@@ -61,7 +61,7 @@ services:
     restart: unless-stopped
 
   ms-security:
-    build: ../ms-security
+    build: ../ea-control-ms-security
     image: ${REGISTRY:-eduaircontrol}/ea-control-ms-security:${TAG:-local}
     container_name: ms-security
     ports:
@@ -142,7 +142,7 @@ services:
     restart: unless-stopped
 
   ms-classroom-management:
-    build: ../ms-classroom-management
+    build: ../ea-control-ms-classroom-management
     image: ${REGISTRY:-eduaircontrol}/ea-control-ms-classroom-management:${TAG:-local}
     container_name: ms-classroom-management
     ports:
@@ -172,7 +172,7 @@ services:
     restart: unless-stopped
 
   ms-sensor-management:
-    build: ../ms-sensor-management
+    build: ../ea-control-ms-sensor-management
     image: ${REGISTRY:-eduaircontrol}/ea-control-ms-sensor-management:${TAG:-local}
     container_name: ms-sensor-management
     ports:
@@ -202,7 +202,7 @@ services:
     restart: unless-stopped
 
   ms-user-management:
-    build: ../ms-user-management
+    build: ../ea-control-ms-user-management
     image: ${REGISTRY:-eduaircontrol}/ea-control-ms-user-management:${TAG:-local}
     container_name: ms-user-management
     ports:
@@ -226,7 +226,7 @@ services:
     restart: unless-stopped
 
   ms-user-experience:
-    build: ../ms-user-experience
+    build: ../ea-control-ms-user-experience
     image: ${REGISTRY:-eduaircontrol}/ea-control-ms-user-experience:${TAG:-local}
     container_name: ms-user-experience
     ports:
@@ -238,8 +238,15 @@ services:
       POSTGRES_PASSWORD: ${USER_EXPERIENCE_PASSWORD:-user_experience_pass}
       JWKS_URI: http://ms-security:8081/api/v1/auth/jwks
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      CLASSROOM_EVENTS_QUEUE: ${USER_EXPERIENCE_CLASSROOM_QUEUE:-eduaircontrol.classroom.ms-user-experience}
     depends_on:
       postgres-user-experience:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/3006' || exit 1"]

@@ -52,4 +52,61 @@ echo "== reutilizar token revocado (debe dar 401 TOKEN_REVOKED) =="
 curl -sS -o /dev/null -w 'reuse http=%{http_code}\n' -X POST "$GATEWAY/api/v1/auth/logout" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{}'
 
+# --- Flujo de negocio end-to-end: ambiente -> sensor -> medicion -> dashboard ---
+# Usa el SUPER_ADMIN para el alta (escrituras ADMIN) y una credencial DEVICE para la
+# ingesta. Los UUID de catalogo son los sembrados por classroom/sensor/monitoring.
+ENVIRONMENT_ID="00000000-0000-4000-8000-000000000401"   # Aula 101 (seed classroom)
+SENSOR_MODEL_ID="00000000-0000-4000-8000-000000000204"  # ESP32_FULL (seed sensor)
+SENSOR_STATUS_ID="00000000-0000-4000-8000-000000000211" # ACTIVE (seed sensor)
+TEMPERATURE_VARIABLE_ID="00000000-0000-4000-8000-000000000071"
+NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+echo "== alta de sensor =="
+SENSOR=$(curl -fsS -X POST "$GATEWAY/api/v1/sensors" -H "Authorization: Bearer $SA_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d "{\"serialNumber\":\"SMK-$SUFFIX\",\"sensorModelId\":\"$SENSOR_MODEL_ID\",\"sensorStatusId\":\"$SENSOR_STATUS_ID\"}")
+SENSOR_ID=$(echo "$SENSOR" | jq -r .sensorId)
+echo "sensor: $SENSOR_ID"
+
+echo "== instalacion del sensor en el ambiente $ENVIRONMENT_ID =="
+INSTALLATION=$(curl -fsS -X POST "$GATEWAY/api/v1/sensor-installations" \
+  -H "Authorization: Bearer $SA_TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"sensorId\":\"$SENSOR_ID\",\"educationalEnvironmentId\":\"$ENVIRONMENT_ID\",\"installedAt\":\"$NOW\"}")
+INSTALLATION_ID=$(echo "$INSTALLATION" | jq -r .sensorInstallationId)
+echo "instalacion: $INSTALLATION_ID"
+
+echo "== credencial de dispositivo (token DEVICE del sensor) =="
+DEVICE=$(curl -fsS -X POST "$GATEWAY/api/v1/device-tokens" -H "Authorization: Bearer $SA_TOKEN" \
+  -H 'Content-Type: application/json' -d "{\"subject\":\"$SENSOR_ID\"}")
+DEVICE_TOKEN=$(echo "$DEVICE" | jq -r .accessToken)
+echo "device token: $([ -n "$DEVICE_TOKEN" ] && echo si || echo no)"
+
+# La instalacion llega a monitoring por el broker (outbox -> RabbitMQ). Se reintenta
+# la ingesta hasta que la proyeccion este lista: si no, el ingest responde 410.
+echo "== ingesta de medicion (espera la proyeccion del broker) =="
+ingest_http="000"
+for attempt in $(seq 1 30); do
+  ingest_http=$(curl -sS -o /tmp/smoke-measurement.json -w '%{http_code}' \
+    -X POST "$GATEWAY/api/v1/measurements" -H "Authorization: Bearer $DEVICE_TOKEN" \
+    -H 'Content-Type: application/json' \
+    -d "{\"sensorInstallationId\":\"$INSTALLATION_ID\",\"variableId\":\"$TEMPERATURE_VARIABLE_ID\",\"value\":23.5,\"measuredAt\":\"$NOW\"}")
+  [ "$ingest_http" = "201" ] && break
+  sleep 2
+done
+if [ "$ingest_http" != "201" ]; then
+  echo "la ingesta fallo (http=$ingest_http): $(cat /tmp/smoke-measurement.json 2>/dev/null)"
+  exit 1
+fi
+echo "medicion ingerida: $(cat /tmp/smoke-measurement.json)"
+
+echo "== dashboard /summary refleja el dato recien ingerido =="
+SUMMARY=$(curl -fsS "$GATEWAY/api/v1/dashboard/summary" -H "Authorization: Bearer $SA_TOKEN")
+echo "$SUMMARY" | jq '{counts: .counts, lastUpdated: .lastUpdated}'
+MEASUREMENTS=$(echo "$SUMMARY" | jq -r .counts.measurements)
+if [ "${MEASUREMENTS:-0}" -lt 1 ]; then
+  echo "el dashboard no ve la medicion (measurements=$MEASUREMENTS)"
+  exit 1
+fi
+echo "el dashboard ve $MEASUREMENTS medicion(es)"
+
 echo "Smoke completado."

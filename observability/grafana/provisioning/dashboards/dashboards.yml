@@ -1,0 +1,14 @@
+# Provider de dashboards: carga los JSON de /var/lib/grafana/dashboards.
+# Con esto el dashboard aparece solo al levantar el overlay de observabilidad.
+apiVersion: 1
+
+providers:
+  - name: EduAirControl
+    orgId: 1
+    folder: EduAirControl
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

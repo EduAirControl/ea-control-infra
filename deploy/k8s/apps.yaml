@@ -15,6 +15,11 @@ spec:
       labels:
         app: api-gateway
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: api-gateway
           image: ghcr.io/eduaircontrol/ea-control-api-gateway:latest
@@ -70,6 +75,11 @@ spec:
       labels:
         app: ms-security
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: ms-security
           image: ghcr.io/eduaircontrol/ea-control-ms-security:latest
@@ -91,9 +101,9 @@ spec:
                   name: eduaircontrol-secrets
                   key: SECURITY_PASSWORD
             - name: SECURITY_RSA_PRIVATE_KEY_PATH
-              value: /app/keys/dev-private.pem
+              value: /app/keys/jwt-private.pem
             - name: SECURITY_RSA_PUBLIC_KEY_PATH
-              value: /app/keys/dev-public.pem
+              value: /app/keys/jwt-public.pem
             - name: SUPERADMIN_EMAIL
               valueFrom:
                 secretKeyRef:
@@ -140,10 +150,10 @@ spec:
           secret:
             secretName: eduaircontrol-secrets
             items:
-              - key: dev-private.pem
-                path: dev-private.pem
-              - key: dev-public.pem
-                path: dev-public.pem
+              - key: jwt-private.pem
+                path: jwt-private.pem
+              - key: jwt-public.pem
+                path: jwt-public.pem
 ---
 apiVersion: v1
 kind: Service
@@ -172,6 +182,11 @@ spec:
       labels:
         app: ms-classroom-management
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: ms-classroom-management
           image: ghcr.io/eduaircontrol/ea-control-ms-classroom-management:latest
@@ -246,6 +261,11 @@ spec:
       labels:
         app: ms-sensor-management
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: ms-sensor-management
           image: ghcr.io/eduaircontrol/ea-control-ms-sensor-management:latest
@@ -320,6 +340,11 @@ spec:
       labels:
         app: ms-user-management
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: ms-user-management
           image: ghcr.io/eduaircontrol/ea-control-ms-user-management:latest
@@ -381,6 +406,11 @@ spec:
       labels:
         app: ms-environment-monitoring
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: ms-environment-monitoring
           image: eduaircontrol/ea-control-ms-environment-monitoring:latest
