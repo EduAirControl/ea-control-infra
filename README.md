@@ -141,3 +141,10 @@ docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
 Prometheus scrapea `/actuator/prometheus`; los servicios deben incluir
 `spring-boot-starter-actuator` y `micrometer-registry-prometheus` para exponer métricas.
 El OTel Collector recibe trazas/métricas/logs en `4317` (gRPC) y `4318` (HTTP).
+
+Grafana starts **pre-provisioned** (`observability/grafana/provisioning/`): the **Prometheus**
+datasource and the **EduAirControl — Overview** dashboard (folder `EduAirControl`) — no manual
+setup. Open [`http://localhost:3001`](http://localhost:3001) (user/password `GRAFANA_USER` /
+`GRAFANA_PASSWORD`, default `admin`/`admin`). The dashboard covers `up`, HTTP (rate / p95 latency /
+5xx), JVM (heap / GC / threads), process CPU and the Hikari pool; PostgreSQL and RabbitMQ are not
+scraped (RabbitMQ has its own console at `:15672`).
