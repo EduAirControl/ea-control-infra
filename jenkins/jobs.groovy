@@ -14,7 +14,8 @@
 //   Content-Type: application/json
 //
 // Credenciales Jenkins requeridas (Manage Jenkins > Credentials):
-//   github-infra  — PAT (read:repo) para clonar ea-control-infra desde los jobs
+//   github-infra  — PAT (read:repo) para clonar ea-control-infra y los repos
+//                   de servicios desde los jobs (checkout autenticado)
 //   ghcr-bot      — usuario/token (write:packages) para push de imágenes a GHCR
 
 def INFRA_REPO  = 'https://github.com/EduAirControl/ea-control-infra.git'
@@ -29,7 +30,7 @@ def services = [
   [name: 'ms-sensor-management',      repo: 'https://github.com/EduAirControl/ea-control-ms-sensor-management.git'],
   [name: 'ms-user-management',        repo: 'https://github.com/EduAirControl/ea-control-ms-user-management.git'],
   [name: 'ms-environment-monitoring', repo: 'https://github.com/EduAirControl/ms-environment-monitoring.git'],
-  [name: 'ms-user-experience',        repo: 'https://github.com/EduAirControl/ea-control-ms-user-experience.git'],
+  [name: 'ms-user-experience',        repo: 'https://github.com/EduAirControl/ms-user-experience.git'],
   [name: 'web',                       repo: 'https://github.com/EduAirControl/ea-control-frontend.git'],
 ]
 

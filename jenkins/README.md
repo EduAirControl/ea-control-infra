@@ -119,6 +119,8 @@ La concurrencia (=1) no se fija aquí: la gestionan los propios jobs con
   (`ms-security`). Es lo que permite usar un único Jenkinsfile para los 8 jobs.
 - **Stage `Checkout` (24-31)**: `checkout` Git manual:
   - `url: ${REPO_URL}` → el repo que hizo push (inyectado por webhook).
+  - `credentialsId: 'github-infra'` → el clone va **autenticado** con el PAT
+    del bot; sin él, GitHub rechaza el fetch de los repos privados (401).
   - `branches: [[name: "${COMMIT_SHA}"]]` → **no** clona la rama, clona el
     commit exacto → el test corresponde 1:1 al push.
   - `CloneOption shallow: false, depth: 1, noTags: true` → clon completo sin
