@@ -35,6 +35,10 @@ fi
 if [ ! -s secrets/test-private.pem ] || [ ! -s secrets/test-public.pem ]; then
   echo "Generando claves RSA de desarrollo (infra/secrets)..."
   ./scripts/gen-dev-keys.sh
+else
+  # Ya existen: aun asi hay que asegurar que el usuario con el que corre
+  # ms-security (no-root desde H-19) pueda leerlas. Ver incidente 2026-10-26.
+  ./scripts/fix-key-ownership.sh
 fi
 
 # Aviso si hay contenedores de los compose por servicio sueltos.
