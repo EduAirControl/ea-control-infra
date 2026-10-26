@@ -25,7 +25,7 @@ pipeline {
     stage('Checkout') {
       steps {
         checkout([$class: 'hudson.plugins.git.GitSCM',
-                  userRemoteConfigs: [[url: "${REPO_URL}"]],
+                  userRemoteConfigs: [[url: "${REPO_URL}", credentialsId: 'github-infra']],
                   branches: [[name: "${COMMIT_SHA}"]],
                   extensions: [[$class: 'hudson.plugins.git.extensions.impl.CloneOption',
                                 shallow: false, depth: 1, noTags: true]]])
