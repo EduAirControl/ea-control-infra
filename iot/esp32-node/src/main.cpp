@@ -213,16 +213,29 @@ static void startProvisioning() {
 // Sensores
 // ─────────────────────────────────────────────────────────────
 
-// KY-038: RMS del ADC -> dB aproximados.
+// KY-038: RMS de la parte AC del ADC -> dB aproximados.
+// El modulo entrega una senal sesgada en DC (~VCC/2): sin restar la media el
+// "RMS" es practicamente constante y el rudo no mueve el valor. Se quita el
+// sesgo y se mapea en escala log (20*log10), como los dB de verdad.
 static float readNoiseDb() {
-    uint32_t sum = 0;
+    uint64_t sum = 0, sumSq = 0;
     for (int i = 0; i < KY038_SAMPLES; i++) {
         uint32_t raw = analogRead(KY038_PIN);
-        sum += raw * raw;
+        sum += raw;
+        sumSq += (uint64_t)raw * raw;
         delayMicroseconds(KY038_SAMPLE_WINDOW_US);
     }
-    float rms = sqrtf((float)sum / (float)KY038_SAMPLES);
-    return NOISE_DB_MIN + (rms / 4095.0f) * (NOISE_DB_MAX - NOISE_DB_MIN);
+    double n = (double)KY038_SAMPLES;
+    double mean = (double)sum / n;
+    double var = (double)sumSq / n - mean * mean;
+    if (var < 1.0) var = 1.0;
+    float rmsAc = (float)sqrt(var);
+
+    float db = 20.0f * log10f(rmsAc) + NOISE_DB_OFFSET;
+    if (db < NOISE_DB_MIN) db = NOISE_DB_MIN;
+    if (db > NOISE_DB_MAX) db = NOISE_DB_MAX;
+    Serial.printf("[KY-038] rms_ac=%.0f\n", rmsAc);
+    return db;
 }
 
 // MQ-135: ADC -> voltaje real (con divisor) -> Rs -> ppm aproximado por la
