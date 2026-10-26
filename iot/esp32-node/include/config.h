@@ -20,7 +20,7 @@
 // KY-038 (ruido): A0 a D34 (GPIO34 = ADC1_CH6). VCC a 3V3.
 // GPIO34 es de solo entrada y no tiene pull-up interno: aqui no hace falta.
 #define KY038_PIN             34
-#define KY038_SAMPLES         100
+#define KY038_SAMPLES         1000    // ~100 ms de ventana (100 us por muestra)
 #define KY038_SAMPLE_WINDOW_US 100
 
 // MQ-135 (calidad de aire, aproxima CO2): A0 a D33 (GPIO33 = ADC1_CH5).
@@ -73,18 +73,18 @@
 // Rs/R0 del datasheet. Para que valga algo hay que medir R0 en aire limpio
 // y ajustarla aqui. Sin calentar ~24h la primera vez, las lecturas no valen.
 // ─────────────────────────────────────────────────────────────
-#define MQ135_R0                10.0f   // Resistencia en aire limpio (kOhm). MEDIR.
+#define MQ135_R0                271.40f // Medido 2026-10-24 al aire libre: Rs/R0 a 400 ppm.
 #define MQ135_RL                10.0f   // Resistencia de carga del modulo (kOhm).
 #define MQ135_DIVIDER_RATIO     1.0f    // R2/(R1+R2) inverso. 2.0 si el divisor es 10k/10k.
 #define MQ135_WARMUP_MS         180000  // 3 min de calentamiento tras cada arranque.
 
 // ─────────────────────────────────────────────────────────────
-// KY-038 (ruido): del ADC 0-4095 a dB aproximados.
-// ─────────────────────────────────────────────────────────────
-#define NOISE_ADC_MIN           0
-#define NOISE_ADC_MAX           4095
+// KY-038 (ruido): RMS AC (con sesgo DC restado) -> dB aproximados en escala log.
+// db = 20*log10(rms_ac) + OFFSET, con piso NOISE_DB_MIN y techo NOISE_DB_MAX.
+// OFFSET se afina empiricalmente con el sensor frente a ruido conocido.
 #define NOISE_DB_MIN            30.0f
 #define NOISE_DB_MAX            90.0f
+#define NOISE_DB_OFFSET         5.0f    // Afino 2026-10-24: reposo~35, aplausos~65
 
 // ─────────────────────────────────────────────────────────────
 // TIMING
