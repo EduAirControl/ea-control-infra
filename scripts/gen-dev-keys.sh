@@ -26,9 +26,17 @@ done
 
 if [ -s secrets/test-private.pem ] && [ -s secrets/test-public.pem ]; then
   echo "las claves de desarrollo ya existen (se omiten)"
+  # Aunque no se generen, el propietario puede no ser el del usuario del
+  # contenedor (p. ej. 600 root:root creado a mano o por un docker previo).
+  ./scripts/fix-key-ownership.sh || true
   exit 0
 fi
 
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out secrets/test-private.pem
 openssl pkey -in secrets/test-private.pem -pubout -out secrets/test-public.pem
 echo "claves generadas: infra/secrets/test-private.pem y test-public.pem"
+
+# openssl crea los ficheros como el usuario que ejecuta el script (p. ej. root
+# en el VPS); ms-security corre como un usuario no-root y necesita leerlos.
+# Ver incidente 2026-10-26 en RUNBOOK-DESPLIEGUE.md 1.3.2.
+./scripts/fix-key-ownership.sh || true
