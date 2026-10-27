@@ -1,3 +1,4 @@
+```groovy
 // Tests de un repositorio (ADR-019). Lo ejecuta el job test-<servicio>
 // definido en jobs.groovy; se activa con un webhook de push a develop/main.
 //
@@ -5,18 +6,33 @@
 //   REPO_URL     — clone URL del repositorio que ha hecho push
 //   COMMIT_SHA   — commit exacto a verificar
 //   REF          — refs/heads/<rama>
+//
 // SERVICE_NAME se deriva del nombre del job (test-<servicio>).
 //
-// Nota: el checkout usa el FQN de GitSCM y la URL en userRemoteConfigs
-// (en este core el lookup por nombre corto "Git" resuelve null).
+// Autenticación de Maven:
+//   Jenkins credential: github-packages-read
+//   Tipo: Username with password
+//   Permiso del token: read:packages
+//
+// El settings.xml se genera temporalmente durante Verify y se elimina
+// al finalizar Maven. No se almacena en el repositorio.
+//
+// En main, tras tests verdes, se encadena deploy-<servicio>.
+
 pipeline {
   agent any
+
   options {
     timestamps()
     disableConcurrentBuilds(abortPrevious: true)
     buildDiscarder(logRotator(numToKeepStr: '30'))
   }
+
   stages {
+
+    // ============================================================
+    // SETUP
+    // ============================================================
     stage('Setup') {
       steps {
         script {
@@ -24,81 +40,220 @@ pipeline {
         }
       }
     }
+
+    // ============================================================
+    // CHECKOUT DEL COMMIT EXACTO
+    // ============================================================
     stage('Checkout') {
       steps {
-        checkout([$class: 'hudson.plugins.git.GitSCM',
-                  userRemoteConfigs: [[url: "${REPO_URL}", credentialsId: 'github-infra']],
-                  branches: [[name: "${COMMIT_SHA}"]],
-                  extensions: [[$class: 'hudson.plugins.git.extensions.impl.CloneOption',
-                                shallow: false, depth: 1, noTags: true]]])
+        checkout([
+          $class: 'hudson.plugins.git.GitSCM',
+          userRemoteConfigs: [[
+            url: "${REPO_URL}",
+            credentialsId: 'github-infra'
+          ]],
+          branches: [[
+            name: "${COMMIT_SHA}"
+          ]],
+          extensions: [[
+            $class: 'hudson.plugins.git.extensions.impl.CloneOption',
+            shallow: false,
+            depth: 1,
+            noTags: true
+          ]]
+        ])
       }
     }
+
+    // ============================================================
+    // VERIFY
+    // ============================================================
     stage('Verify') {
       steps {
         script {
+
+          // El frontend utiliza npm y no necesita autenticación Maven.
           if (env.SERVICE_NAME == 'web') {
+
             dir('apps/web') {
               sh 'npm ci'
               sh 'npm run build'
             }
+
           } else {
-            sh 'chmod +x ./mvnw'
-            sh './mvnw -B -ntp verify'
+
+            // Credenciales para descargar dependencias privadas de
+            // GitHub Packages, como ea-control-security-starter.
+            withCredentials([
+              usernamePassword(
+                credentialsId: 'github-packages-read',
+                usernameVariable: 'GITHUB_USERNAME',
+                passwordVariable: 'GITHUB_TOKEN'
+              )
+            ]) {
+
+              sh '''
+                set -eu
+                set +x
+
+                chmod +x ./mvnw
+
+                SETTINGS_FILE="$(mktemp)"
+                trap 'rm -f "$SETTINGS_FILE"' EXIT
+
+                cat > "$SETTINGS_FILE" <<EOF
+<settings>
+  <servers>
+    <server>
+      <id>github</id>
+      <username>${GITHUB_USERNAME}</username>
+      <password>${GITHUB_TOKEN}</password>
+    </server>
+  </servers>
+</settings>
+EOF
+
+                ./mvnw -B -ntp -s "$SETTINGS_FILE" verify
+              '''
+            }
           }
         }
       }
     }
-    // En main, tras tests verdes, se despliega (deploy encadenado).
+
+    // ============================================================
+    // DEPLOY GATE
+    // Solo despliega después de que Verify haya terminado bien
+    // y el webhook corresponda a la rama main.
+    // ============================================================
     stage('Deploy gate (main)') {
-      when { environment name: 'REF', value: 'refs/heads/main' }
+      when {
+        environment name: 'REF', value: 'refs/heads/main'
+      }
+
       steps {
         build job: "deploy-${env.SERVICE_NAME}",
-              wait: true,
-              parameters: [
-                string(name: 'REPO_URL', value: "${env.REPO_URL}"),
-                string(name: 'COMMIT_SHA', value: "${env.COMMIT_SHA}"),
-                string(name: 'SERVICE_NAME', value: "${env.SERVICE_NAME}")
-              ]
+          wait: true,
+          parameters: [
+            string(
+              name: 'REPO_URL',
+              value: "${env.REPO_URL}"
+            ),
+            string(
+              name: 'COMMIT_SHA',
+              value: "${env.COMMIT_SHA}"
+            ),
+            string(
+              name: 'SERVICE_NAME',
+              value: "${env.SERVICE_NAME}"
+            )
+          ]
       }
     }
   }
+
+  // ============================================================
+  // POST: NOTIFICACIONES Y RESULTADO
+  // ============================================================
   post {
-    // Notificacion a Discord inline (sin libreria cargada: el load en un
-    // stage no deja la referencia disponible en post bajo CPS declarativo).
+
     always {
       script {
         try {
           def status = currentBuild.currentResult ?: 'UNKNOWN'
-          def color  = [SUCCESS: 3066993, FAILURE: 15158332, UNSTABLE: 16776960, ABORTED: 9807270].get(status, 9807270)
-          def emoji  = [SUCCESS: '✅', FAILURE: '❌', UNSTABLE: '⚠️', ABORTED: '⏹'].get(status, '❓')
+
+          def color = [
+            SUCCESS : 3066993,
+            FAILURE : 15158332,
+            UNSTABLE: 16776960,
+            ABORTED : 9807270
+          ].get(status, 9807270)
+
+          def emoji = [
+            SUCCESS : '✅',
+            FAILURE : '❌',
+            UNSTABLE: '⚠️',
+            ABORTED : '⏹'
+          ].get(status, '❓')
+
           def fields = [
-            [name: 'Servicio', value: (env.SERVICE_NAME ?: '—').toString().take(1024), inline: true],
-            [name: 'Rama',     value: (env.REF ?: '—').replaceFirst('^refs/heads/', '').toString().take(1024), inline: true],
-            [name: 'Commit',   value: (env.COMMIT_SHA ?: '—').take(7), inline: true],
-            [name: 'Duracion', value: currentBuild.durationString, inline: true]
+            [
+              name: 'Servicio',
+              value: (env.SERVICE_NAME ?: '—').toString().take(1024),
+              inline: true
+            ],
+            [
+              name: 'Rama',
+              value: (env.REF ?: '—')
+                .replaceFirst('^refs/heads/', '')
+                .toString()
+                .take(1024),
+              inline: true
+            ],
+            [
+              name: 'Commit',
+              value: (env.COMMIT_SHA ?: '—').take(7),
+              inline: true
+            ],
+            [
+              name: 'Duracion',
+              value: currentBuild.durationString,
+              inline: true
+            ]
           ]
+
           def payload = groovy.json.JsonOutput.toJson([
             username: 'Jenkins CI',
             embeds: [[
-              title:     "${emoji} ${env.JOB_NAME} #${env.BUILD_NUMBER} — ${status}",
-              url:       env.BUILD_URL,
-              color:     color,
-              fields:    fields,
-              footer:    [text: env.BUILD_URL ?: ''],
-              timestamp: new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))
+              title: "${emoji} ${env.JOB_NAME} #${env.BUILD_NUMBER} — ${status}",
+              url: env.BUILD_URL,
+              color: color,
+              fields: fields,
+              footer: [
+                text: env.BUILD_URL ?: ''
+              ],
+              timestamp: new Date().format(
+                "yyyy-MM-dd'T'HH:mm:ss'Z'",
+                TimeZone.getTimeZone('UTC')
+              )
             ]]
           ])
-          withCredentials([string(credentialsId: 'discord-webhook', variable: 'DISCORD_WEBHOOK')]) {
-            writeFile file: 'discord-notify.json', text: payload
-            sh 'curl -sS -m 20 -X POST -H "Content-Type: application/json" ' +
-               '-d @discord-notify.json "$DISCORD_WEBHOOK" > /dev/null || true'
+
+          withCredentials([
+            string(
+              credentialsId: 'discord-webhook',
+              variable: 'DISCORD_WEBHOOK'
+            )
+          ]) {
+
+            writeFile(
+              file: 'discord-notify.json',
+              text: payload
+            )
+
+            sh '''
+              set +x
+              curl -sS -m 20 \
+                -X POST \
+                -H "Content-Type: application/json" \
+                -d @discord-notify.json \
+                "$DISCORD_WEBHOOK" > /dev/null || true
+            '''
           }
+
         } catch (e) {
           echo "No se pudo notificar a Discord: ${e.message}"
         }
       }
     }
-    failure { echo "Tests fallidos: ${env.SERVICE_NAME} @ ${env.COMMIT_SHA} (${env.REPO_URL})" }
-    fixed   { echo "Tests recuperados: ${env.SERVICE_NAME} @ ${env.COMMIT_SHA}" }
+
+    failure {
+      echo "Tests fallidos: ${env.SERVICE_NAME} @ ${env.COMMIT_SHA} (${env.REPO_URL})"
+    }
+
+    fixed {
+      echo "Tests recuperados: ${env.SERVICE_NAME} @ ${env.COMMIT_SHA}"
+    }
   }
 }
+```
