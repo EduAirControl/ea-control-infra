@@ -1,3 +1,4 @@
+```groovy
 // Tests de un repositorio (ADR-019). Lo ejecuta el job test-<servicio>
 // definido en jobs.groovy; se activa con un webhook de push a develop/main.
 //
@@ -52,11 +53,8 @@ pipeline {
     stage('Deploy gate (main)') {
       when { environment name: 'REF', value: 'refs/heads/main' }
       steps {
-        // No bloquear el executor del test esperando al deploy: con 2
-        // ejecutores, test (wait:true) + deploy compitiendo por el mismo pool
-        // produce un deadlock cuando el deploy no encuentra executor libre.
         build job: "deploy-${env.SERVICE_NAME}",
-              wait: false,
+              wait: true,
               parameters: [
                 string(name: 'REPO_URL', value: "${env.REPO_URL}"),
                 string(name: 'COMMIT_SHA', value: "${env.COMMIT_SHA}"),
@@ -105,3 +103,4 @@ pipeline {
     fixed   { echo "Tests recuperados: ${env.SERVICE_NAME} @ ${env.COMMIT_SHA}" }
   }
 }
+```
