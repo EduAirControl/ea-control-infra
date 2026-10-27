@@ -60,6 +60,11 @@ them with those names:
 (gitignored) when it is missing; run `./scripts/gen-dev-keys.sh` to generate it on its own.
 These keys are for local use only and must never be reused in production.
 
+ms-security runs as a non-root user (`appuser`), so the keypair must be readable by that
+uid: `up.sh` and `gen-dev-keys.sh` run `scripts/fix-key-ownership.sh`, which detects the
+real container uid, fixes the owner and verifies the read with a throwaway container (or
+warns with the exact command when it cannot detect it).
+
 > **No mezcles composes.** Los `docker-compose.yml` de cada servicio y el de
 > `api-gateway/docker-compose.yml` existen para trabajar un servicio aislado.
 > Usarlos a la vez que este stack falla: compiten por nombres de contenedor y
