@@ -99,6 +99,25 @@
 #define WIFI_REPROVISION_AFTER_MS 60000   // 60 s sin Wi-Fi -> volver a publicar BLE
 
 // ─────────────────────────────────────────────────────────────
+// RELOJ (ADR-021)
+//
+// El nodo no tiene RTC: su hora sale de NTP. measuredAt es el instante UTC de
+// la LECTURA, no del POST, para que un reintento lleve la misma marca y el
+// backend pueda deduplicar por (instalacion, variable, measured_at).
+// ─────────────────────────────────────────────────────────────
+#define NTP_SERVER_1        "pool.ntp.org"
+#define NTP_SERVER_2        "time.google.com"
+#define NTP_SERVER_3        "time.cloudflare.com"
+// Sin NTP el reloj del ESP32 arranca en 1970: cualquier epoch menor a esto
+// (2024-01-01) se trata como "hora no sincronizada".
+#define MIN_VALID_EPOCH     1704067200L
+// Ciclos leidos antes de la primera sincronizacion NTP, retenidos en RAM con su
+// offset de millis() hasta poder reconstruir su hora. Si el nodo se reinicia
+// antes de sincronizar se pierden: nunca se envian con una hora inventada.
+// El buffer persistente (LittleFS) los sustituye en el Issue #7.
+#define UNSYNCED_CYCLES_MAX 16
+
+// ─────────────────────────────────────────────────────────────
 // BLE PROVISIONING (contrato de guia_configuracion_esp32_react_native_ble.md)
 // ─────────────────────────────────────────────────────────────
 #define BLE_SERVICE_UUID  "4fafc201-1fb5-459e-8fcc-c5c9c331914b"

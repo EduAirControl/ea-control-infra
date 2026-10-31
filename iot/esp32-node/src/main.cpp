@@ -259,9 +259,68 @@ static float readCo2Ppm() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Reloj (ADR-021)
+//
+// measuredAt = instante UTC de la lectura, en segundos enteros. Antes de la
+// primera sincronizacion NTP no hay hora: el ciclo se guarda con su offset de
+// millis() y se reconstruye al sincronizar.
+// ─────────────────────────────────────────────────────────────
+struct Cycle {
+    uint32_t readMs;   // millis() al leer, para reconstruir la hora si no habia NTP
+    time_t epoch;      // UTC en segundos; 0 = leido sin hora sincronizada
+    float temperature;
+    float humidity;
+    float noiseDb;
+    float co2Ppm;
+};
+
+static Cycle unsyncedCycles[UNSYNCED_CYCLES_MAX];
+static uint8_t unsyncedCount = 0;
+static bool ntpStarted = false;
+static bool clockWasSynced = false;
+
+static bool clockSynced() {
+    return time(nullptr) >= MIN_VALID_EPOCH;
+}
+
+// Hora de la lectura actual, o 0 si el reloj aun no esta sincronizado.
+static time_t nowEpochOrZero() {
+    time_t now = time(nullptr);
+    return now >= MIN_VALID_EPOCH ? now : 0;
+}
+
+// Hora de un ciclo leido sin NTP, restando al reloj ya sincronizado el tiempo
+// transcurrido desde la lectura. La resta sin signo absorbe el desbordamiento de millis().
+static time_t epochFromOffset(uint32_t readMs) {
+    return time(nullptr) - (time_t)((uint32_t)millis() - readMs) / 1000;
+}
+
+static void formatUtc(time_t epoch, char* out, size_t size) {
+    struct tm utc;
+    gmtime_r(&epoch, &utc);
+    strftime(out, size, "%Y-%m-%dT%H:%M:%SZ", &utc);
+}
+
+// SNTP sigue reintentando por su cuenta y resincroniza cada hora: basta con
+// arrancarlo una vez por arranque, ya con Wi-Fi.
+static void ensureNtp() {
+    if (!ntpStarted) {
+        configTime(0, 0, NTP_SERVER_1, NTP_SERVER_2, NTP_SERVER_3);
+        ntpStarted = true;
+        Serial.println("[NTP] syncing clock");
+    }
+    if (!clockWasSynced && clockSynced()) {
+        clockWasSynced = true;
+        char iso[25];
+        formatUtc(time(nullptr), iso, sizeof(iso));
+        Serial.printf("[NTP] clock synced: %s\n", iso);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Ingesta HTTP
 // ─────────────────────────────────────────────────────────────
-static bool sendMeasurement(const char* variableId, float value) {
+static bool sendMeasurement(const char* variableId, float value, time_t measuredAt) {
     if (installationGone) return false;
     if (WiFi.status() != WL_CONNECTED) return false;
     if (isnan(value)) {
@@ -273,7 +332,9 @@ static bool sendMeasurement(const char* variableId, float value) {
     doc["sensorInstallationId"] = installationId;
     doc["variableId"] = variableId;
     doc["value"] = serialized(String(value, 2));
-    // measuredAt se omite a proposito: el backend usa su propio reloj.
+    char measuredAtIso[25];
+    formatUtc(measuredAt, measuredAtIso, sizeof(measuredAtIso));
+    doc["measuredAt"] = measuredAtIso;
 
     String body;
     serializeJson(doc, body);
@@ -313,24 +374,57 @@ static bool sendMeasurement(const char* variableId, float value) {
     return ok;
 }
 
+// Las cuatro variables del ciclo comparten measuredAt: la clave de idempotencia
+// incluye variable_id, asi que no chocan entre si.
+static void sendCycle(const Cycle& cycle, time_t measuredAt) {
+    digitalWrite(LED_STATUS_PIN, HIGH);
+    sendMeasurement(VAR_TEMPERATURE, cycle.temperature, measuredAt);
+    sendMeasurement(VAR_HUMIDITY, cycle.humidity, measuredAt);
+    sendMeasurement(VAR_NOISE, cycle.noiseDb, measuredAt);
+    sendMeasurement(VAR_CO2, cycle.co2Ppm, measuredAt);
+    digitalWrite(LED_STATUS_PIN, LOW);
+}
+
+// Envia los ciclos leidos antes de la primera sincronizacion, ya con hora
+// reconstruida. Un solo intento: los reintentos llegan con el Issue #8.
+static void flushUnsyncedCycles() {
+    if (unsyncedCount == 0 || !clockSynced()) return;
+    Serial.printf("[NTP] rebuilding time of %u earlier cycle(s)\n", unsyncedCount);
+    for (uint8_t i = 0; i < unsyncedCount; i++) {
+        sendCycle(unsyncedCycles[i], epochFromOffset(unsyncedCycles[i].readMs));
+    }
+    unsyncedCount = 0;
+}
+
 static void readAndReport() {
-    float temperature = dht.readTemperature();
-    float humidity = dht.readHumidity();
-    float noiseDb = readNoiseDb();
-    float co2Ppm = readCo2Ppm();
+    // La hora se toma antes de leer los sensores: es el instante de la lectura.
+    Cycle cycle;
+    cycle.readMs = millis();
+    cycle.epoch = nowEpochOrZero();
+    cycle.temperature = dht.readTemperature();
+    cycle.humidity = dht.readHumidity();
+    cycle.noiseDb = readNoiseDb();
+    cycle.co2Ppm = readCo2Ppm();
 
     Serial.println("---- lectura ----");
-    Serial.printf("  temperatura : %s\n", isnan(temperature) ? "n/d" : String(temperature, 1).c_str());
-    Serial.printf("  humedad     : %s\n", isnan(humidity) ? "n/d" : String(humidity, 1).c_str());
-    Serial.printf("  ruido       : %.1f dB\n", noiseDb);
-    Serial.printf("  CO2 (aprox) : %s\n", isnan(co2Ppm) ? "n/d" : String(co2Ppm, 0).c_str());
+    Serial.printf("  temperatura : %s\n", isnan(cycle.temperature) ? "n/d" : String(cycle.temperature, 1).c_str());
+    Serial.printf("  humedad     : %s\n", isnan(cycle.humidity) ? "n/d" : String(cycle.humidity, 1).c_str());
+    Serial.printf("  ruido       : %.1f dB\n", cycle.noiseDb);
+    Serial.printf("  CO2 (aprox) : %s\n", isnan(cycle.co2Ppm) ? "n/d" : String(cycle.co2Ppm, 0).c_str());
 
-    digitalWrite(LED_STATUS_PIN, HIGH);
-    sendMeasurement(VAR_TEMPERATURE, temperature);
-    sendMeasurement(VAR_HUMIDITY, humidity);
-    sendMeasurement(VAR_NOISE, noiseDb);
-    sendMeasurement(VAR_CO2, co2Ppm);
-    digitalWrite(LED_STATUS_PIN, LOW);
+    if (cycle.epoch == 0) {
+        // Sin hora no se envia nada con fecha adivinada: se retiene el ciclo con
+        // su offset. Si la RAM se llena se descarta el mas viejo.
+        if (unsyncedCount == UNSYNCED_CYCLES_MAX) {
+            memmove(&unsyncedCycles[0], &unsyncedCycles[1], sizeof(Cycle) * (UNSYNCED_CYCLES_MAX - 1));
+            unsyncedCount--;
+        }
+        unsyncedCycles[unsyncedCount++] = cycle;
+        Serial.printf("[NTP] clock not synced: cycle held (%u)\n", unsyncedCount);
+        return;
+    }
+
+    sendCycle(cycle, cycle.epoch);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -406,6 +500,9 @@ void loop() {
         return;
     }
     wifiDownSince = 0;
+
+    ensureNtp();
+    flushUnsyncedCycles();
 
     if (!readyToReport()) {
         startProvisioning();
