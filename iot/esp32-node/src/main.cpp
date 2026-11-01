@@ -5,12 +5,14 @@
 #include <ArduinoJson.h>
 #include <DHT.h>
 #include <Preferences.h>
+#include <LittleFS.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
 
 #include "config.h"
+#include "cycle_ring.h"
 #if BACKEND_USE_TLS
 #include "ca_cert.h"
 #endif
@@ -18,10 +20,11 @@
 // ============================================================
 // EduAirControl - Nodo ESP32 de medicion ambiental
 //
-// Publica temperatura, humedad, ruido y calidad de aire en
-// POST /api/v1/measurements de ms-environment-monitoring.
+// Mide temperatura, humedad, ruido y calidad de aire cada 10 s, guarda cada ciclo
+// en un buffer circular de LittleFS (24 h) y lo envia en un lote por minuto a
+// POST /api/v1/measurements/batch de ms-environment-monitoring.
 // El alta, la instalacion y la credencial se hacen desde la app movil:
-// este firmware solo mide, provisiona por BLE y envia.
+// este firmware mide, provisiona por BLE (bajo demanda) y envia.
 // ============================================================
 
 // ─────────────────────────────────────────────────────────────
@@ -38,7 +41,15 @@ static DHT dht(DHT11_PIN, DHT_TYPE);
 static unsigned long bootMs = 0;
 static unsigned long lastReadMs = 0;
 static bool bleRunning = false;
-static unsigned long wifiDownSince = 0;
+static unsigned long bleOpenedMs = 0;
+// El Wi-Fi se mantiene sin bloquear el loop: medir no depende de tener red.
+static bool wifiStarted = false;
+static bool wifiWasUp = false;
+static unsigned long wifiLastTryMs = 0;
+// Mientras el callback BLE conecta el Wi-Fi, el loop no toca la radio.
+static volatile bool provisioningWifi = false;
+// Lo levanta el callback BLE al guardar credenciales; el loop reconcilia el buffer.
+static volatile bool installationChanged = false;
 // El backend contesta 410 cuando la instalacion fue desvinculada o purgada: ya no
 // existe y no volvera a aceptar datos. Se corta el envio para no spamear la API.
 static bool installationGone = false;
@@ -46,8 +57,14 @@ static bool installationGone = false;
 // ─────────────────────────────────────────────────────────────
 // Persistencia
 // ─────────────────────────────────────────────────────────────
+// Instalacion a la que pertenecen los ciclos del buffer, y ultima secuencia confirmada.
+static String bufferInstallation;
+static uint16_t bufferAck = 0;
+
 static void loadConfig() {
     nvs.begin(NVS_NAMESPACE, false);
+    bufferInstallation = nvs.getString("bufInst", "");
+    bufferAck = nvs.getUShort("bufAck", 0);
     wifiSsid = nvs.getString("ssid", "");
     wifiPass = nvs.getString("pass", "");
     deviceToken = nvs.getString("token", "");
@@ -104,9 +121,11 @@ static void connectWifiFromConfig() {
     // Un aprovisionamiento nuevo trae un installationId nuevo: el rechazo (410)
     // del anterior deja de valer.
     installationGone = false;
+    provisioningWifi = true;
     Serial.printf("[WIFI] conectando a '%s'\n", wifiSsid.c_str());
     WiFi.mode(WIFI_STA);
     WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
+    wifiStarted = true;
 
     unsigned long start = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_CONNECT_TIMEOUT_MS) {
@@ -122,6 +141,9 @@ static void connectWifiFromConfig() {
         Serial.println("[WIFI] no se pudo conectar");
         notifyStatus("STATUS:FAIL");
     }
+    wifiWasUp = WiFi.status() == WL_CONNECTED;
+    wifiLastTryMs = millis();
+    provisioningWifi = false;
 }
 
 class ServerCallbacks : public BLEServerCallbacks {
@@ -178,6 +200,7 @@ class CharacteristicCallbacks : public BLECharacteristicCallbacks {
         deviceToken = token;
         installationId = install;
         saveConfig();
+        installationChanged = true;
         Serial.println("[BLE] credenciales guardadas en NVS");
 
         connectWifiFromConfig();
@@ -206,6 +229,7 @@ static void startProvisioning() {
     BLEDevice::startAdvertising();
 
     bleRunning = true;
+    bleOpenedMs = millis();
     Serial.printf("[BLE] esperando provisioning como '%s'\n", BLE_DEVICE_NAME);
 }
 
@@ -318,26 +342,140 @@ static void ensureNtp() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Ingesta HTTP
+// Buffer offline (LittleFS)
+//
+// Archivo de BUFFER_CAPACITY registros de 24 bytes (ver cycle_ring.h). Cada
+// escritura cierra y reabre el archivo: es lo que fuerza a LittleFS a confirmarla,
+// y un corte de energia solo puede dejar a medias el registro en curso (su CRC
+// lo descarta al arrancar).
 // ─────────────────────────────────────────────────────────────
-static bool sendMeasurement(const char* variableId, float value, time_t measuredAt) {
-    if (installationGone) return false;
-    if (WiFi.status() != WL_CONNECTED) return false;
-    if (isnan(value)) {
-        Serial.printf("[HTTP] se omite %s: el sensor no devolvio valor\n", variableId);
-        return false;
+class FileStore {
+public:
+    bool open() {
+        if (!LittleFS.begin(true, "/littlefs", 5, "spiffs")) return false;
+        const size_t size = (size_t)BUFFER_CAPACITY * sizeof(CycleRecord);
+        bool create = !LittleFS.exists(BUFFER_FILE);
+        if (!create) {
+            File probe = LittleFS.open(BUFFER_FILE, "r");
+            create = !probe || probe.size() != size;
+            if (probe) probe.close();
+        }
+        if (create) {
+            File fresh = LittleFS.open(BUFFER_FILE, "w");
+            if (!fresh) return false;
+            uint8_t zeros[480] = {0};
+            for (size_t written = 0; written < size; written += sizeof(zeros)) {
+                fresh.write(zeros, sizeof(zeros));
+            }
+            fresh.close();
+            Serial.println("[BUFFER] file created");
+        }
+        file_ = LittleFS.open(BUFFER_FILE, "r+");
+        return (bool)file_;
     }
 
-    JsonDocument doc;
-    doc["sensorInstallationId"] = installationId;
-    doc["variableId"] = variableId;
-    doc["value"] = serialized(String(value, 2));
-    char measuredAtIso[25];
-    formatUtc(measuredAt, measuredAtIso, sizeof(measuredAtIso));
-    doc["measuredAt"] = measuredAtIso;
+    bool readAt(uint32_t offset, void* buf, size_t len) {
+        return file_.seek(offset) && file_.read((uint8_t*)buf, len) == len;
+    }
 
+    bool writeAt(uint32_t offset, const void* buf, size_t len) {
+        bool ok = file_.seek(offset) && file_.write((const uint8_t*)buf, len) == len;
+        file_.close();
+        file_ = LittleFS.open(BUFFER_FILE, "r+");
+        return ok && (bool)file_;
+    }
+
+private:
+    File file_;
+};
+
+static FileStore store;
+static CycleRing<FileStore> ring(store, BUFFER_CAPACITY);
+static bool bufferReady = false;
+
+static void saveAck(uint16_t ack) {
+    bufferAck = ack;
+    nvs.putUShort("bufAck", ack);
+}
+
+// Los ciclos del buffer pertenecen a una instalacion. Si se aprovisiona la misma,
+// se conservan; si es otra, son lecturas de otro lugar y se descartan.
+static void reconcileBufferInstallation() {
+    if (!bufferReady || installationId.length() == 0) return;
+    if (bufferInstallation == installationId) return;
+    if (bufferInstallation.length() > 0 && ring.unsent() > 0) {
+        Serial.printf("[BUFFER] new installation: discarding %u pending cycle(s)\n",
+                      (unsigned)ring.unsent());
+        ring.clear();
+        saveAck(ring.ackSeq());
+    }
+    bufferInstallation = installationId;
+    nvs.putString("bufInst", bufferInstallation);
+}
+
+static void bufferCycle(const Cycle& cycle, time_t epoch) {
+    if (!bufferReady) {
+        Serial.println("[BUFFER] unavailable: cycle lost");
+        return;
+    }
+    CycleRecord record;
+    memset(&record, 0, sizeof(record));
+    record.epoch = (uint32_t)epoch;
+    record.temperature = cycle.temperature;
+    record.humidity = cycle.humidity;
+    record.noiseDb = cycle.noiseDb;
+    record.co2Ppm = cycle.co2Ppm;
+
+    static uint32_t lastOverwritten = 0;
+    if (!ring.append(record)) {
+        Serial.println("[BUFFER] write failed: cycle lost");
+        return;
+    }
+    if (ring.overwritten() != lastOverwritten) {
+        lastOverwritten = ring.overwritten();
+        Serial.println("[BUFFER] full: oldest unsent cycle overwritten");
+    }
+    Serial.printf("[BUFFER] stored, %u pending\n", (unsigned)ring.unsent());
+}
+
+// ─────────────────────────────────────────────────────────────
+// Envio por lotes
+// ─────────────────────────────────────────────────────────────
+enum class SendResult {
+    Ok,     // el backend proceso el lote: todo item es final (creado, duplicado o rechazado)
+    Drop,   // el backend lo rechazo entero y reintentar no lo arregla (400, 413)
+    Keep,   // fallo transitorio o del token: se conserva y se reintenta
+    Gone    // 410: la instalacion ya no existe
+};
+
+static void appendReading(String& body, size_t& items, const char* variableId,
+                          float value, const char* measuredAtIso) {
+    if (!isfinite(value)) return;
+    char item[260];
+    snprintf(item, sizeof(item),
+             "{\"sensorInstallationId\":\"%s\",\"variableId\":\"%s\",\"value\":%.2f,\"measuredAt\":\"%s\"}",
+             installationId.c_str(), variableId, value, measuredAtIso);
+    if (items++ > 0) body += ',';
+    body += item;
+}
+
+static SendResult postBatch(const CycleRecord* cycles, size_t count) {
     String body;
-    serializeJson(doc, body);
+    body.reserve(count * 4 * 200 + 32);
+    body = "{\"measurements\":[";
+    size_t items = 0;
+    char iso[25];
+    for (size_t i = 0; i < count; i++) {
+        formatUtc((time_t)cycles[i].epoch, iso, sizeof(iso));
+        appendReading(body, items, VAR_TEMPERATURE, cycles[i].temperature, iso);
+        appendReading(body, items, VAR_HUMIDITY, cycles[i].humidity, iso);
+        appendReading(body, items, VAR_NOISE, cycles[i].noiseDb, iso);
+        appendReading(body, items, VAR_CO2, cycles[i].co2Ppm, iso);
+    }
+    body += "]}";
+
+    // Todos los valores eran NaN (sensores sin lectura): no hay nada que enviar.
+    if (items == 0) return SendResult::Ok;
 
 #if BACKEND_USE_TLS
     WiFiClientSecure client;
@@ -351,47 +489,89 @@ static bool sendMeasurement(const char* variableId, float value, time_t measured
     String url = String(scheme) + "://" + BACKEND_HOST + ":" + String(BACKEND_PORT) + API_PATH;
 
     if (!http.begin(client, url)) {
-        Serial.println("[HTTP] no se pudo abrir la conexion");
-        return false;
+        Serial.println("[SYNC] could not open the connection");
+        return SendResult::Keep;
     }
     http.addHeader("Content-Type", "application/json");
     http.addHeader("Authorization", "Bearer " + deviceToken);
 
+    digitalWrite(LED_STATUS_PIN, HIGH);
     int code = http.POST(body);
+    String response = code == 200 ? http.getString() : String();
     http.end();
+    digitalWrite(LED_STATUS_PIN, LOW);
 
-    // 410 Gone: la instalacion ya no existe en el backend (desvinculada o purgada
-    // desde la app o la web). Reenviar no la va a recrear, asi que se corta.
+    if (code == 200) {
+        JsonDocument filter;
+        filter["accepted"] = true;
+        filter["duplicates"] = true;
+        filter["rejected"] = true;
+        JsonDocument summary;
+        if (!deserializeJson(summary, response, DeserializationOption::Filter(filter))) {
+            Serial.printf("[SYNC] batch %u cycle(s), %u reading(s): accepted=%d duplicates=%d rejected=%d\n",
+                          (unsigned)count, (unsigned)items, (int)summary["accepted"],
+                          (int)summary["duplicates"], (int)summary["rejected"]);
+        } else {
+            Serial.printf("[SYNC] batch %u cycle(s) -> 200\n", (unsigned)count);
+        }
+        return SendResult::Ok;
+    }
+    // 410 Gone: la instalacion ya no existe (desvinculada o purgada). Reenviar no la
+    // va a recrear: se corta el envio y se pide reprovisionar.
     if (code == 410) {
-        installationGone = true;
-        Serial.println("[HTTP] 410: la instalacion ya no existe.");
-        Serial.println("[HTTP] hay que aprovisionar el nodo de nuevo.");
-        return false;
+        Serial.println("[SYNC] 410: the installation no longer exists, provisioning needed");
+        return SendResult::Gone;
+    }
+    // 400 y 413 describen al lote, no a la red: reintentarlo igual fallaria siempre y
+    // bloquearia la cola. Los demas codigos (401, 403, 429, 5xx, red) se reintentan.
+    if (code == 400 || code == 413) {
+        Serial.printf("[SYNC] batch rejected with %d: dropped\n", code);
+        return SendResult::Drop;
+    }
+    Serial.printf("[SYNC] batch failed (%d): kept for retry, %u pending\n", code,
+                  (unsigned)ring.unsent());
+    return SendResult::Keep;
+}
+
+static unsigned long nextSendMs = 0;
+
+// Un lote por llamada. Mientras quede cola, el siguiente sale tras BATCH_PACING_MS; si
+// no, tras SEND_INTERVAL_MS. Solo se borra del buffer lo que el backend confirmo.
+static void drainBuffer() {
+    if ((long)(millis() - nextSendMs) < 0) return;
+    if (!bufferReady || installationGone || WiFi.status() != WL_CONNECTED || !clockSynced()) return;
+    if (ring.unsent() == 0) {
+        nextSendMs = millis() + SEND_INTERVAL_MS;
+        return;
     }
 
-    bool ok = code == 200 || code == 201;
-    Serial.printf("[HTTP] %s -> %d %s\n", variableId, code, ok ? "ok" : "FALLO");
-    return ok;
+    CycleRecord batch[BATCH_MAX_CYCLES];
+    size_t skipped = 0;
+    size_t count = ring.peek(batch, BATCH_MAX_CYCLES, &skipped);
+    SendResult result = count == 0 ? SendResult::Ok : postBatch(batch, count);
+
+    switch (result) {
+        case SendResult::Ok:
+        case SendResult::Drop:
+            saveAck(ring.ackPeeked());
+            nextSendMs = millis() + (ring.unsent() > 0 ? BATCH_PACING_MS : SEND_INTERVAL_MS);
+            break;
+        case SendResult::Gone:
+            installationGone = true;
+            break;
+        case SendResult::Keep:
+            nextSendMs = millis() + SEND_INTERVAL_MS;
+            break;
+    }
 }
 
-// Las cuatro variables del ciclo comparten measuredAt: la clave de idempotencia
-// incluye variable_id, asi que no chocan entre si.
-static void sendCycle(const Cycle& cycle, time_t measuredAt) {
-    digitalWrite(LED_STATUS_PIN, HIGH);
-    sendMeasurement(VAR_TEMPERATURE, cycle.temperature, measuredAt);
-    sendMeasurement(VAR_HUMIDITY, cycle.humidity, measuredAt);
-    sendMeasurement(VAR_NOISE, cycle.noiseDb, measuredAt);
-    sendMeasurement(VAR_CO2, cycle.co2Ppm, measuredAt);
-    digitalWrite(LED_STATUS_PIN, LOW);
-}
-
-// Envia los ciclos leidos antes de la primera sincronizacion, ya con hora
-// reconstruida. Un solo intento: los reintentos llegan con el Issue #8.
+// Los ciclos leidos antes de la primera sincronizacion NTP pasan al buffer con la
+// hora ya reconstruida.
 static void flushUnsyncedCycles() {
     if (unsyncedCount == 0 || !clockSynced()) return;
     Serial.printf("[NTP] rebuilding time of %u earlier cycle(s)\n", unsyncedCount);
     for (uint8_t i = 0; i < unsyncedCount; i++) {
-        sendCycle(unsyncedCycles[i], epochFromOffset(unsyncedCycles[i].readMs));
+        bufferCycle(unsyncedCycles[i], epochFromOffset(unsyncedCycles[i].readMs));
     }
     unsyncedCount = 0;
 }
@@ -413,7 +593,7 @@ static void readAndReport() {
     Serial.printf("  CO2 (aprox) : %s\n", isnan(cycle.co2Ppm) ? "n/d" : String(cycle.co2Ppm, 0).c_str());
 
     if (cycle.epoch == 0) {
-        // Sin hora no se envia nada con fecha adivinada: se retiene el ciclo con
+        // Sin hora no se guarda nada con fecha adivinada: se retiene el ciclo con
         // su offset. Si la RAM se llena se descarta el mas viejo.
         if (unsyncedCount == UNSYNCED_CYCLES_MAX) {
             memmove(&unsyncedCycles[0], &unsyncedCycles[1], sizeof(Cycle) * (UNSYNCED_CYCLES_MAX - 1));
@@ -424,7 +604,62 @@ static void readAndReport() {
         return;
     }
 
-    sendCycle(cycle, cycle.epoch);
+    bufferCycle(cycle, cycle.epoch);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Wi-Fi y boton BOOT
+// ─────────────────────────────────────────────────────────────
+
+// Mantiene la conexion sin bloquear: medir y guardar no dependen de tener red.
+static void maintainWifi() {
+    if (provisioningWifi || !hasCredentials()) return;
+
+    bool up = WiFi.status() == WL_CONNECTED;
+    if (up && !wifiWasUp) {
+        Serial.printf("[WIFI] conectado, IP %s\n", WiFi.localIP().toString().c_str());
+    } else if (!up && wifiWasUp) {
+        Serial.printf("[WIFI] connection lost, measuring continues (%u pending)\n",
+                      (unsigned)ring.unsent());
+    }
+    wifiWasUp = up;
+    if (up) return;
+
+    if (!wifiStarted) {
+        Serial.printf("[WIFI] conectando a '%s'\n", wifiSsid.c_str());
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
+        wifiStarted = true;
+        wifiLastTryMs = millis();
+    } else if (millis() - wifiLastTryMs >= WIFI_RETRY_MS) {
+        wifiLastTryMs = millis();
+        WiFi.reconnect();
+    }
+}
+
+// BLE bajo demanda (ADR-021): BOOT pulsado BOOT_HOLD_MS abre el provisioning.
+static void handleBootButton() {
+    static unsigned long downSince = 0;
+    if (digitalRead(BOOT_BUTTON_PIN) != LOW) {
+        downSince = 0;
+        return;
+    }
+    if (downSince == 0) {
+        downSince = millis();
+    } else if (!bleRunning && millis() - downSince >= BOOT_HOLD_MS) {
+        Serial.println("[BLE] BOOT held: opening provisioning");
+        startProvisioning();
+    }
+}
+
+// Un nodo ya provisionado cierra el BLE a los 5 min; sin provisionar (o dado de baja)
+// lo mantiene abierto, porque no hay otra cosa que pueda hacer.
+static void handleBleTimeout() {
+    if (bleRunning && readyToReport() && !installationGone &&
+        millis() - bleOpenedMs >= BLE_PROVISION_TIMEOUT_MS) {
+        Serial.println("[BLE] timeout: closing provisioning");
+        stopProvisioning();
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -440,24 +675,29 @@ void setup() {
     digitalWrite(LED_STATUS_PIN, LOW);
     pinMode(KY038_PIN, INPUT);
     pinMode(MQ135_PIN, INPUT);
+    pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
     dht.begin();
     loadConfig();
+
+    bufferReady = store.open() && ring.begin(bufferAck);
+    if (bufferReady) {
+        Serial.printf("[BUFFER] ready: %u cycle(s) pending, capacity %u\n",
+                      (unsigned)ring.unsent(), (unsigned)BUFFER_CAPACITY);
+        reconcileBufferInstallation();
+    } else {
+        Serial.println("[BUFFER] could not open LittleFS: readings will not be stored");
+    }
 
     bootMs = millis();
     Serial.printf("  instalacion : %s\n", installationId.length() ? installationId.c_str() : "(sin asignar)");
     Serial.printf("  token       : %s\n", deviceToken.length() ? "presente" : "ausente");
     Serial.printf("  backend     : %s:%d\n", BACKEND_HOST, BACKEND_PORT);
 
-    if (hasCredentials()) {
-        connectWifiFromConfig();
-    } else {
+    // El BLE solo se abre solo cuando no hay nada que hacer sin el: primer
+    // aprovisionamiento. Con credenciales guardadas el nodo mide aunque no haya
+    // Wi-Fi, y el BLE se abre con el boton BOOT.
+    if (!readyToReport()) {
         Serial.println("[BLE] sin credenciales: hay que provisionar");
-    }
-
-    // Se ofrece BLE si falta configurar O si el Wi-Fi no pudo conectar: sin lo
-    // segundo, credenciales guardadas invalidas dejan el nodo en un limbo mudo
-    // (reconectando para siempre sin anunciar ESP32_Config).
-    if (!readyToReport() || WiFi.status() != WL_CONNECTED) {
         startProvisioning();
     }
 
@@ -472,57 +712,46 @@ void loop() {
         stopProvisioning();
     }
 
-    if (bleRunning) {
-        // Si mientras tanto volvio el Wi-Fi con credenciales completas, se retira
-        // el BLE (igual que pendingStopBle tras un provisioning exitoso).
-        if (WiFi.status() == WL_CONNECTED && readyToReport() && !installationGone) {
-            Serial.println("[BLE] credenciales completas y en linea: retiro el BLE");
-            stopProvisioning();
-            delay(100);
-            return;
-        }
-        // Mientras se provisiona no se mide: evita enviar con credenciales a medias.
-        delay(100);
-        return;
+    handleBootButton();
+    handleBleTimeout();
+    maintainWifi();
+
+    if (installationChanged) {
+        installationChanged = false;
+        reconcileBufferInstallation();
     }
 
-    if (WiFi.status() != WL_CONNECTED) {
-        if (wifiDownSince == 0) wifiDownSince = millis();
-        if (millis() - wifiDownSince >= WIFI_REPROVISION_AFTER_MS) {
-            Serial.println("[WIFI] 60 s sin conexion: vuelvo a ofrecer ESP32_Config");
-            wifiDownSince = 0;
-            startProvisioning();
-            return;
-        }
-        Serial.println("[WIFI] desconectado, reintentando...");
-        WiFi.reconnect();
-        delay(5000);
-        return;
+    if (WiFi.status() == WL_CONNECTED) {
+        ensureNtp();
     }
-    wifiDownSince = 0;
-
-    ensureNtp();
     flushUnsyncedCycles();
 
     if (!readyToReport()) {
         startProvisioning();
+        delay(100);
         return;
     }
 
-    // El backend rechazo la instalacion (410): ya no existe. Se vuelve a ofrecer
-    // como ESP32_Config para que se reprovisione desde la app, sin reflashear.
-    // Como startProvisioning pone bleRunning en alto, este aviso solo se imprime una vez.
+    // El backend rechazo la instalacion (410): ya no existe. Se ofrece el BLE para
+    // reprovisionar desde la app, sin reflashear.
     if (installationGone) {
-        Serial.println("[SENSOR] instalacion dada de baja: entrando en provisioning");
-        startProvisioning();
+        if (!bleRunning) {
+            Serial.println("[SENSOR] instalacion dada de baja: entrando en provisioning");
+            startProvisioning();
+        }
+        delay(100);
         return;
     }
 
     // El MQ-135 necesita calentar: hasta entonces sus lecturas no valen.
     if (millis() - bootMs < MQ135_WARMUP_MS) {
-        unsigned long left = (MQ135_WARMUP_MS - (millis() - bootMs)) / 1000;
-        Serial.printf("[SENSOR] calentamiento MQ-135, faltan %lu s\n", left);
-        delay(5000);
+        static unsigned long lastWarmupLog = 0;
+        if (millis() - lastWarmupLog >= 30000) {
+            lastWarmupLog = millis();
+            Serial.printf("[SENSOR] calentamiento MQ-135, faltan %lu s\n",
+                          (MQ135_WARMUP_MS - (millis() - bootMs)) / 1000);
+        }
+        delay(100);
         return;
     }
 
@@ -531,5 +760,6 @@ void loop() {
         readAndReport();
     }
 
-    delay(100);
+    drainBuffer();
+    delay(50);
 }
