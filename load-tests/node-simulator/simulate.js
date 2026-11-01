@@ -1,4 +1,4 @@
-// node-simulator/simulate.js — simulates N ESP32 nodes sending measurements
+﻿// node-simulator/simulate.js â€” simulates N ESP32 nodes sending measurements
 // Usage: node simulate.js --nodes 10 --interval 10000 --duration 60000
 // Requires: node 18+, npm install (none needed, uses fetch)
 
@@ -9,9 +9,9 @@ const getArg = (name, def) => {
 };
 
 const GATEWAY = process.env.GATEWAY_URL || 'http://localhost:8080';
-const NODES = parseInt(getArg('nodes', '10'));
-const INTERVAL = parseInt(getArg('interval', '10000'));
-const DURATION = parseInt(getArg('duration', '60000'));
+const NODES = Number.parseInt(getArg('nodes', '10'));
+const INTERVAL = Number.parseInt(getArg('interval', '10000'));
+const DURATION = Number.parseInt(getArg('duration', '60000'));
 const TOKEN = process.env.DEVICE_TOKEN || '';
 const INSTALLATION_ID = process.env.INSTALLATION_ID || '00000000-0000-4000-8000-000000000001';
 const VARIABLE_ID = process.env.VARIABLE_ID || '00000000-0000-4000-8000-000000000071';
@@ -20,7 +20,7 @@ console.log(`Simulating ${NODES} nodes, interval ${INTERVAL}ms, duration ${DURAT
 console.log(`Gateway: ${GATEWAY}`);
 
 function randomValue() {
-  return 18 + Math.random() * 12;
+  return 18 + Math.random() * 12; // NOSONAR
 }
 
 function nowIso() {
@@ -62,7 +62,7 @@ const interval = setInterval(() => {
     process.exit(0);
   }
   for (const nodeId of nodes) {
-    sendMeasurement(nodeId).then(() => sent++);
+    sendMeasurement(nodeId).then(() => { sent++; }).catch(() => {});
   }
 }, INTERVAL);
 

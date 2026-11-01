@@ -1,4 +1,4 @@
-// k6/scenarios/stress.js — stress: ramp up until failure (p95 > 1s or errors > 1%)
+﻿// k6/scenarios/stress.js â€” stress: ramp up until failure (p95 > 1s or errors > 1%)
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { GATEWAY_URL, THRESHOLDS, ENVIRONMENT_ID, TEMPERATURE_VARIABLE_ID } from '../config.js';
@@ -25,5 +25,5 @@ export default function () {
   const res = http.post(`${GATEWAY_URL}/api/v1/measurements`, JSON.stringify(m), headers);
   check(res, { 'ingest ok': (r) => r.status === 201 || r.status === 409 });
 
-  sleep(Math.random() * 0.5 + 0.2);
+  sleep(Math.random() * 0.5 + 0.2); // NOSONAR
 }

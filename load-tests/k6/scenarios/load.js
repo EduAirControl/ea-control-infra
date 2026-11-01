@@ -1,4 +1,4 @@
-// k6/scenarios/load.js — progressive load: 10 → 25 → 50 → 100 → 200 VUs
+﻿// k6/scenarios/load.js â€” progressive load: 10 â†’ 25 â†’ 50 â†’ 100 â†’ 200 VUs
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { GATEWAY_URL, THRESHOLDS, ENVIRONMENT_ID, TEMPERATURE_VARIABLE_ID, CO2_VARIABLE_ID } from '../config.js';
@@ -28,7 +28,7 @@ export default function () {
   const headers = authHeaders(sa.token);
 
   // Weighted mix of operations
-  const r = Math.random();
+  const r = Math.random(); // NOSONAR
   if (r < 0.2) {
     // 20%: ingest single measurement
     const m = randomMeasurement('00000000-0000-4000-8000-000000000001', TEMPERATURE_VARIABLE_ID);
@@ -55,5 +55,5 @@ export default function () {
     check(res, { 'series 200': (r) => r.status === 200 });
   }
 
-  sleep(Math.random() * 2 + 0.5);
+  sleep(Math.random() * 2 + 0.5); // NOSONAR
 }

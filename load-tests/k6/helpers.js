@@ -1,4 +1,4 @@
-// k6/helpers.js — authentication and data helpers
+﻿// k6/helpers.js â€” authentication and data helpers
 import { GATEWAY_URL, SUPERADMIN_EMAIL, SUPERADMIN_PASSWORD } from './config.js';
 import http from 'k6/http';
 import { check } from 'k6';
@@ -30,7 +30,7 @@ export function randomMeasurement(installationId, variableId) {
   return {
     sensorInstallationId: installationId,
     variableId: variableId,
-    value: 20 + Math.random() * 10,
+    value: 20 + Math.random() * 10, // NOSONAR
     measuredAt: nowIso(),
   };
 }

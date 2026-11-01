@@ -1,4 +1,4 @@
-// k6/config.js — shared configuration for EduAirControl load tests
+﻿// k6/config.js â€” shared configuration for EduAirControl load tests
 export const GATEWAY_URL = __ENV.GATEWAY_URL || 'http://localhost:8080';
 export const SUPERADMIN_EMAIL = __ENV.SUPERADMIN_EMAIL || 'admin@eduaircontrol.com';
 export const SUPERADMIN_PASSWORD = __ENV.SUPERADMIN_PASSWORD || '';
@@ -25,5 +25,5 @@ export const VALUE_RANGES = {
 
 export function randomValue(variable) {
   const r = VALUE_RANGES[variable] || VALUE_RANGES.temperature;
-  return r.min + Math.random() * (r.max - r.min);
+  return r.min + Math.random() * (r.max - r.min); // NOSONAR
 }

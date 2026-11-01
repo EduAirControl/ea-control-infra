@@ -1,4 +1,4 @@
-// k6/scenarios/spike.js — sudden spike: 0 → 200 VUs in 10s
+﻿// k6/scenarios/spike.js â€” sudden spike: 0 â†’ 200 VUs in 10s
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { GATEWAY_URL, THRESHOLDS, ENVIRONMENT_ID } from '../config.js';
@@ -21,5 +21,5 @@ export default function () {
   const res = http.get(`${GATEWAY_URL}/api/v1/dashboard/summary`, headers);
   check(res, { 'summary 200': (r) => r.status === 200 });
 
-  sleep(Math.random() * 1 + 0.5);
+  sleep(Math.random() * 1 + 0.5); // NOSONAR
 }
