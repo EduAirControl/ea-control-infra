@@ -1,4 +1,3 @@
-```groovy
 // Tests de un repositorio (ADR-019). Lo ejecuta el job test-<servicio>
 // definido en jobs.groovy; se activa con un webhook de push a develop/main.
 //
@@ -103,4 +102,3 @@ pipeline {
     fixed   { echo "Tests recuperados: ${env.SERVICE_NAME} @ ${env.COMMIT_SHA}" }
   }
 }
-```
