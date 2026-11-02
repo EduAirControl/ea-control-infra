@@ -36,14 +36,51 @@ pipeline {
     stage('Verify') {
       steps {
         script {
+
+          // El frontend utiliza npm y no necesita autenticación Maven.
           if (env.SERVICE_NAME == 'web') {
+
             dir('apps/web') {
               sh 'npm ci'
               sh 'npm run build'
             }
+
           } else {
-            sh 'chmod +x ./mvnw'
-            sh './mvnw -B -ntp verify'
+
+            // Credenciales para descargar dependencias privadas de
+            // GitHub Packages, como ea-control-security-starter.
+            withCredentials([
+              usernamePassword(
+                credentialsId: 'github-packages-read',
+                usernameVariable: 'GITHUB_USERNAME',
+                passwordVariable: 'GITHUB_TOKEN'
+              )
+            ]) {
+
+              sh '''
+                set -eu
+                set +x
+
+                chmod +x ./mvnw
+
+                SETTINGS_FILE="$(mktemp)"
+                trap 'rm -f "$SETTINGS_FILE"' EXIT
+
+                cat > "$SETTINGS_FILE" <<EOF
+<settings>
+  <servers>
+    <server>
+      <id>github</id>
+      <username>${GITHUB_USERNAME}</username>
+      <password>${GITHUB_TOKEN}</password>
+    </server>
+  </servers>
+</settings>
+EOF
+
+                ./mvnw -B -ntp -s "$SETTINGS_FILE" verify
+              '''
+            }
           }
         }
       }
