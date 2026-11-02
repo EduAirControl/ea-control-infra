@@ -345,9 +345,8 @@ static void ensureNtp() {
 // Buffer offline (LittleFS)
 //
 // Archivo de BUFFER_CAPACITY registros de 24 bytes (ver cycle_ring.h). Cada
-// escritura cierra y reabre el archivo: es lo que fuerza a LittleFS a confirmarla,
-// y un corte de energia solo puede dejar a medias el registro en curso (su CRC
-// lo descarta al arrancar).
+// escritura se confirma con flush(); un corte de energia solo puede dejar a medias
+// el registro en curso (su CRC lo descarta al arrancar).
 // ─────────────────────────────────────────────────────────────
 class FileStore {
 public:
@@ -379,10 +378,19 @@ public:
     }
 
     bool writeAt(uint32_t offset, const void* buf, size_t len) {
-        bool ok = file_.seek(offset) && file_.write((const uint8_t*)buf, len) == len;
-        file_.close();
-        file_ = LittleFS.open(BUFFER_FILE, "r+");
-        return ok && (bool)file_;
+        // flush() confirma la escritura (lfs_file_sync) sin cerrar el archivo: cerrarlo y
+        // reabrirlo en cada ciclo pedia memoria al heap justo despues del TLS, ya
+        // fragmentado, y fallaba.
+        if (!file_.seek(offset)) {
+            Serial.println("[BUFFER] seek failed");
+            return false;
+        }
+        if (file_.write((const uint8_t*)buf, len) != len) {
+            Serial.println("[BUFFER] write incomplete");
+            return false;
+        }
+        file_.flush();
+        return true;
     }
 
 private:
@@ -428,7 +436,7 @@ static void bufferCycle(const Cycle& cycle, time_t epoch) {
 
     static uint32_t lastOverwritten = 0;
     if (!ring.append(record)) {
-        Serial.println("[BUFFER] write failed: cycle lost");
+        Serial.printf("[BUFFER] write failed: cycle lost (free heap %u)\n", (unsigned)ESP.getFreeHeap());
         return;
     }
     if (ring.overwritten() != lastOverwritten) {
@@ -497,7 +505,7 @@ static SendResult postBatch(const CycleRecord* cycles, size_t count) {
 
     digitalWrite(LED_STATUS_PIN, HIGH);
     int code = http.POST(body);
-    String response = code == 200 ? http.getString() : String();
+    String response = http.getString();
     http.end();
     digitalWrite(LED_STATUS_PIN, LOW);
 
@@ -530,6 +538,9 @@ static SendResult postBatch(const CycleRecord* cycles, size_t count) {
     }
     Serial.printf("[SYNC] batch failed (%d): kept for retry, %u pending\n", code,
                   (unsigned)ring.unsent());
+    if (response.length() > 0) {
+        Serial.printf("[SYNC] response: %.200s\n", response.c_str());
+    }
     return SendResult::Keep;
 }
 
