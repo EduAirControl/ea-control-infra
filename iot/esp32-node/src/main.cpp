@@ -13,6 +13,7 @@
 
 #include "config.h"
 #include "cycle_ring.h"
+#include "retry_policy.h"
 #if BACKEND_USE_TLS
 #include "ca_cert.h"
 #endif
@@ -467,6 +468,9 @@ static void appendReading(String& body, size_t& items, const char* variableId,
     body += item;
 }
 
+// Espera pedida por el servidor en el ultimo 429 (0 si no hubo o no se pudo leer).
+static uint32_t lastRetryAfterMs = 0;
+
 static SendResult postBatch(const CycleRecord* cycles, size_t count) {
     String body;
     body.reserve(count * 4 * 200 + 32);
@@ -503,9 +507,16 @@ static SendResult postBatch(const CycleRecord* cycles, size_t count) {
     http.addHeader("Content-Type", "application/json");
     http.addHeader("Authorization", "Bearer " + deviceToken);
 
+    // Retry-After solo llega con 429; hay que pedirlo antes de enviar para que HTTPClient lo guarde.
+    const char* wantedHeaders[] = {"Retry-After"};
+    http.collectHeaders(wantedHeaders, 1);
+
     digitalWrite(LED_STATUS_PIN, HIGH);
     int code = http.POST(body);
     String response = http.getString();
+    lastRetryAfterMs = code == 429
+        ? parseRetryAfterMs(http.header("Retry-After").c_str(), RETRY_AFTER_MIN_MS, RETRY_AFTER_MAX_MS)
+        : 0;
     http.end();
     digitalWrite(LED_STATUS_PIN, LOW);
 
@@ -536,6 +547,13 @@ static SendResult postBatch(const CycleRecord* cycles, size_t count) {
         Serial.printf("[SYNC] batch rejected with %d: dropped\n", code);
         return SendResult::Drop;
     }
+    if (code == 429) {
+        if (lastRetryAfterMs > 0) {
+            Serial.printf("[SYNC] 429: the server asks to wait %lu s\n", (unsigned long)(lastRetryAfterMs / 1000));
+        } else {
+            Serial.println("[SYNC] 429 without a usable Retry-After: backing off");
+        }
+    }
     Serial.printf("[SYNC] batch failed (%d): kept for retry, %u pending\n", code,
                   (unsigned)ring.unsent());
     if (response.length() > 0) {
@@ -545,6 +563,7 @@ static SendResult postBatch(const CycleRecord* cycles, size_t count) {
 }
 
 static unsigned long nextSendMs = 0;
+static RetryState retryState;
 
 // Un lote por llamada. Mientras quede cola, el siguiente sale tras BATCH_PACING_MS; si
 // no, tras SEND_INTERVAL_MS. Solo se borra del buffer lo que el backend confirmo.
@@ -564,15 +583,22 @@ static void drainBuffer() {
     switch (result) {
         case SendResult::Ok:
         case SendResult::Drop:
+            retryState.reset();
             saveAck(ring.ackPeeked());
             nextSendMs = millis() + (ring.unsent() > 0 ? BATCH_PACING_MS : SEND_INTERVAL_MS);
             break;
         case SendResult::Gone:
             installationGone = true;
             break;
-        case SendResult::Keep:
-            nextSendMs = millis() + SEND_INTERVAL_MS;
+        case SendResult::Keep: {
+            // Nada se borra; solo se espera mas con cada fallo seguido (ADR-021).
+            uint32_t wait = retryState.onFailure(lastRetryAfterMs, SEND_INTERVAL_MS, RETRY_CAP_MS,
+                                                 esp_random(), RETRY_JITTER_PERCENT);
+            nextSendMs = millis() + wait;
+            Serial.printf("[SYNC] next attempt in %lu s (consecutive failure %u)\n",
+                          (unsigned long)(wait / 1000), (unsigned)retryState.failures());
             break;
+        }
     }
 }
 
@@ -629,6 +655,11 @@ static void maintainWifi() {
     bool up = WiFi.status() == WL_CONNECTED;
     if (up && !wifiWasUp) {
         Serial.printf("[WIFI] conectado, IP %s\n", WiFi.localIP().toString().c_str());
+        // Sin red no se intentaba enviar, asi que no hay fallos del servidor que
+        // castigar: se parte de cero. La espera al azar evita que toda una flota
+        // vuelva a la vez tras una caida del Wi-Fi o del proveedor.
+        retryState.reset();
+        nextSendMs = millis() + (esp_random() % RECONNECT_SPREAD_MS);
     } else if (!up && wifiWasUp) {
         Serial.printf("[WIFI] connection lost, measuring continues (%u pending)\n",
                       (unsigned)ring.unsent());
