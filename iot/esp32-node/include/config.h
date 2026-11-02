@@ -33,7 +33,7 @@
 // ─────────────────────────────────────────────────────────────
 // BACKEND (api-gateway en la nube: https://api.eduaircontrol.tech)
 //
-// El unico camino de ingesta es POST /api/v1/measurements. Exige un token
+// El nodo envia por lotes a POST /api/v1/measurements/batch. Exige un token
 // de dispositivo (roles:["DEVICE"]): los headers X-User-* estan excluidos
 // a proposito. El gateway enruta /api/v1/measurements/** a
 // ms-environment-monitoring.
@@ -43,7 +43,7 @@
 #define BACKEND_HOST        "api.eduaircontrol.tech"
 #define BACKEND_PORT        443
 #define BACKEND_USE_TLS     1
-#define API_PATH            "/api/v1/measurements"
+#define API_PATH            "/api/v1/measurements/batch"
 
 // ─────────────────────────────────────────────────────────────
 // IDENTIDAD DEL DISPOSITIVO
@@ -89,14 +89,35 @@
 // ─────────────────────────────────────────────────────────────
 // TIMING
 // ─────────────────────────────────────────────────────────────
-// 10 s por ciclo: el DHT-11 exige >=1 s entre lecturas y el rate limit del
-// gateway (100 req/min por usuario y ruta) admite holgadamente los 4 POST
-// del ciclo (24/min). Bajar de 10 s no gana nada en la nube.
+// 10 s por ciclo: el DHT-11 exige >=1 s entre lecturas. Bajar de 10 s no gana
+// nada en la nube.
 #define SENSOR_READ_INTERVAL_MS  10000   // 10 s entre ciclos de medicion
 #define HTTP_TIMEOUT_MS          10000
-#define WIFI_CONNECT_TIMEOUT_MS  20000
-#define BLE_PROVISION_TIMEOUT_MS 300000  // 5 min esperando provisioning
-#define WIFI_REPROVISION_AFTER_MS 60000   // 60 s sin Wi-Fi -> volver a publicar BLE
+#define WIFI_CONNECT_TIMEOUT_MS  20000   // espera maxima al provisionar por BLE
+#define WIFI_RETRY_MS            10000   // reintento de reconexion en marcha
+#define BLE_PROVISION_TIMEOUT_MS 300000  // 5 min abierto (si el nodo ya esta provisionado)
+
+// BLE bajo demanda (ADR-021): mantener BOOT (GPIO0) pulsado este tiempo, ya con el
+// nodo en marcha, abre el provisioning. No se abre solo al caerse el Wi-Fi.
+#define BOOT_BUTTON_PIN          0
+#define BOOT_HOLD_MS             3000
+
+// ─────────────────────────────────────────────────────────────
+// BUFFER OFFLINE Y ENVIO POR LOTES (ADR-021, ADR-022)
+//
+// Cada ciclo se guarda primero en un archivo circular de LittleFS y un emisor lo
+// vacia una vez por minuto en un lote (6 ciclos = 24 lecturas). Online u offline
+// es el mismo camino: una caida solo hace el lote mas grande.
+// ─────────────────────────────────────────────────────────────
+#define BUFFER_FILE              "/cycles.bin"
+#define BUFFER_CAPACITY          8640    // 24 h a un ciclo cada 10 s
+#define SEND_INTERVAL_MS         60000   // un lote por minuto
+// Tope por peticion: 25 ciclos = 100 lecturas (~20 KB de cuerpo). El contrato admite
+// 1000, pero la RAM del nodo no.
+#define BATCH_MAX_CYCLES         25
+// Vaciando una cola grande se espacian los lotes (el gateway admite 100 peticiones
+// por minuto por usuario y ruta). Los reintentos con 429 llegan con el Issue #8.
+#define BATCH_PACING_MS          800
 
 // ─────────────────────────────────────────────────────────────
 // RELOJ (ADR-021)
@@ -114,7 +135,7 @@
 // Ciclos leidos antes de la primera sincronizacion NTP, retenidos en RAM con su
 // offset de millis() hasta poder reconstruir su hora. Si el nodo se reinicia
 // antes de sincronizar se pierden: nunca se envian con una hora inventada.
-// El buffer persistente (LittleFS) los sustituye en el Issue #7.
+// Al sincronizar pasan al buffer persistente (LittleFS) con su hora ya reconstruida.
 #define UNSYNCED_CYCLES_MAX 16
 
 // ─────────────────────────────────────────────────────────────

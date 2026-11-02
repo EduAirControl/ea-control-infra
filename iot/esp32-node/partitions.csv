@@ -1,0 +1,13 @@
+# EduAirControl - tabla de particiones del nodo (ADR-021)
+#
+# Sin ranuras OTA: el firmware se actualiza por USB. El espacio liberado se
+# reparte entre mas margen para el programa y el buffer offline (LittleFS).
+#
+# nvs queda en el mismo offset y tamano que min_spiffs.csv (0x9000, 0x5000): al
+# reflashear SIN borrar toda la flash se conservan Wi-Fi, token e installationId.
+#
+# Name,    Type, SubType, Offset,   Size,     Flags
+nvs,       data, nvs,     0x9000,   0x5000,
+phy_init,  data, phy,     0xF000,   0x1000,
+factory,   app,  factory, 0x10000,  0x2F0000,
+spiffs,    data, spiffs,  0x300000, 0x100000,

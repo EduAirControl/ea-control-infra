@@ -26,6 +26,10 @@ pio run -t erase
 Esperar `Chip erase completed successfully`. Esto sí borra WiFi/token/installation
 (a diferencia de un reflasheo normal, que preserva la NVS).
 
+> Si el nodo **ya estaba provisionado** y solo actualizas el firmware, **omite este
+> paso**: la tabla de particiones nueva deja la NVS en el mismo sitio y los datos se
+> conservan. Un `erase` además descarta el buffer de lecturas pendientes.
+
 ## 2. Flashear el firmware real
 
 ```bash
@@ -43,9 +47,11 @@ pio device monitor -b 115200
 Salida esperada:
 
 ```
+[BOOT] reset reason: 1
 === EduAirControl - nodo ESP32 ===
   instalacion : (vacio)
   token       : (vacio)
+[BUFFER] file created
 [BLE] iniciando provisioning...
 ```
 
@@ -78,11 +84,17 @@ Salida esperada:
   ---- lectura ----
     temperatura : ...
     CO2 (aprox) : ~350-450 al aire limpio
-  [HTTP] <variable-id> -> 201 ok   (x4)
+  [BUFFER] stored, 3 pending
+  ```
+
+- Cada minuto, un lote con los ciclos acumulados:
+
+  ```
+  [SYNC] batch 6 cycle(s), 24 reading(s): accepted=24 duplicates=0 rejected=0
   ```
 
 - Verificación en backend: la web (`https://eduaircontrol.tech`) o la app muestran
-  los 4 valores del ambiente actualizándose cada ~10 s.
+  los 4 valores del ambiente, con hasta ~1 min de retraso.
 
 ## 6. Troubleshooting
 
@@ -90,13 +102,17 @@ Salida esperada:
 |---|---|
 | No anuncia BLE | No se borró la NVS: repetir paso 1 |
 | `STATUS:FAIL` / timeout en app | Reintentar cerca del nodo; revisar Bluetooth y permisos de la app |
-| `401 FALLO` en los POST | Token no valido para el backend: repetir paso 4 |
-| `410 Gone` + "hay que aprovisionar" | La instalacion ya no existe: reprovisionar (paso 4) |
+| `[SYNC] batch failed (401)` | Token no valido para el backend: repetir paso 4. Las lecturas quedan en el buffer |
+| `[SYNC] 410: the installation no longer exists` | La instalacion ya no existe: el BLE se abre solo, reprovisionar (paso 4) |
 | CO2 absurdo | Firmware sin `MQ135_R0` calibrado: rebuild desde este repo actualizado |
-| WiFi no conecta tras provisioning | SSID/pass mal escritos; el nodo vuelve a BLE tras 60 s sin WiFi |
+| WiFi no conecta tras provisioning | SSID/pass mal escritos: mantener BOOT 3 s para abrir el BLE y reenviarlos. El nodo ya no abre el BLE solo por perder el Wi-Fi |
 
-## 7. Alternativa: reprovisionar sin borrar la NVS
+## 7. Reprovisionar sin borrar la NVS (botón BOOT)
 
-El nodo entra en modo BLE solo si no conecta WiFi durante 60 s
-(`WIFI_REPROVISION_AFTER_MS`). Para forzarlo sin `erase`, apagar el router o
-alejar al nodo. Para un reprovisionamiento "limpio", este `erase` es más confiable.
+Con el nodo ya provisionado, **mantén pulsado BOOT (GPIO0) 3 segundos**. En el serie
+sale `[BLE] BOOT held: opening provisioning` y aparece `ESP32_Config`. Repite el paso 4.
+
+- El BLE queda abierto **5 minutos** y se cierra solo; el nodo **sigue midiendo**.
+- Misma instalación → conserva las lecturas pendientes. Instalación distinta → las
+  descarta.
+- Ya no hace falta apagar el router ni usar `erase` para cambiar de red.
