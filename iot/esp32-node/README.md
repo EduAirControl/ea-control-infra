@@ -1,8 +1,9 @@
 # Nodo ESP32 — EduAirControl
 
 Firmware del nodo de medición ambiental. Lee **temperatura y humedad** (DHT-11),
-**ruido** (KY-038) y **calidad de aire** (MQ-135) y las publica en el backend.
-La configuración Wi-Fi, el token del dispositivo y su instalación llegan por
+**ruido** (KY-038) y **calidad de aire** (MQ-135) y las envía al backend en **lotes de un minuto**.
+Cada lectura se guarda primero en un buffer en la flash (24 h), así que un corte
+de red o de Wi-Fi no pierde datos. La configuración Wi-Fi, el token del dispositivo y su instalación llegan por
 **BLE** desde la app móvil: no hay nada que compilar dentro del código.
 
 ---
@@ -14,8 +15,8 @@ La configuración Wi-Fi, el token del dispositivo y su instalación llegan por
 | Placa | ESP32 DevKit (30 pines) |
 | Cable | USB **de datos** (muchos de carga no sirven) |
 | PC | Linux/macOS/Windows con [PlatformIO](https://platformio.org/install/cli) |
-| Red | Tu PC y el ESP32 en la **misma red Wi-Fi** |
-| Backend | El stack levantado desde `infra/` (`./up.sh`) |
+| Red | Un Wi-Fi con salida a internet (el nodo habla con `api.eduaircontrol.tech` por HTTPS) |
+| Backend | `ms-environment-monitoring` desplegado con el endpoint `POST /api/v1/measurements/batch` |
 
 Comprueba que PlatformIO ve tu placa **antes** de flashear:
 
@@ -63,13 +64,11 @@ Abre `include/config.h` y revisa:
 
 | Constante | Qué es | Cuándo tocarla |
 |-----------|--------|----------------|
-| `BACKEND_HOST` | IP del PC que corre `infra/` | **Siempre** si tu IP cambió. Mira la tuya con `ip addr` |
-| `BACKEND_PORT` | Puerto del ingest (`3003`) | Casi nunca |
+| `BACKEND_HOST` / `BACKEND_PORT` / `BACKEND_USE_TLS` | Servidor al que se envía (`api.eduaircontrol.tech`, `443`, TLS) | Solo para apuntar a un backend local: pon la IP del PC, el puerto `3003` y `BACKEND_USE_TLS 0` |
+| `SENSOR_READ_INTERVAL_MS` | Segundos entre ciclos de medición (10 s) | Casi nunca. Si lo cambias, `BUFFER_CAPACITY` debe cubrir 24 h |
+| `SEND_INTERVAL_MS` / `BATCH_MAX_CYCLES` | Un lote por minuto, hasta 25 ciclos (100 lecturas) por petición | Casi nunca (el backend admite hasta 1000 lecturas por lote) |
 | `MQ135_R0` | Resistencia del MQ-135 en aire limpio (kΩ) | **Al poner un sensor nuevo**: hay que medirla |
 | `MQ135_DIVIDER_RATIO` | Factor del divisor de voltaje del A0 | Si cambias las resistencias. Con divisor 10k/10k → `2.0` |
-
-> ⚠️ Tu IP es **dinámica** (`192.168.100.49` hoy, pero puede cambiar). Lo más
-> cómodo es reservarla en el router (DHCP reservation) para que no se mueva.
 
 **Todo lo demás se configura por BLE desde la app**: no hace falta compilar la
 contraseña del Wi-Fi ni el token dentro del firmware.
@@ -92,9 +91,15 @@ pio device list                 # ver qué hay
 pio run -t upload --upload-port /dev/ttyUSB0   # forzarlo
 ```
 
-La **primera** vez tarda más: se descarga el toolchain y el esquema de
-particiones cambia (usa `min_spiffs`, que deja ~1.9 MB para el programa; el
-esquema por defecto se queda corto porque BLE + Wi-Fi + JSON ocupan ~1.6 MB).
+La **primera** vez tarda más: se descarga el toolchain. El nodo usa una tabla de
+particiones propia (`partitions.csv`): 3 MB para el programa, la NVS en el mismo
+sitio de siempre y **1 MB de LittleFS** para el buffer. No hay OTA (el flasheo es
+siempre por cable).
+
+> **Actualizando un nodo que ya estaba provisionado:** flashea con `pio run -t upload`
+> **sin** `erase`. La NVS (Wi-Fi, token, instalación) queda intacta, no hace falta
+> reprovisionar. La primera vez que arranca, el nodo formatea solo la partición
+> LittleFS y crea el archivo del buffer (`[BUFFER] file created`).
 
 Si el flasheo falla con `Failed to connect to ESP32`: mantén pulsado el botón
 **BOOT** de la placa mientras empieza la subida, y suéltalo cuando aparezca
@@ -124,14 +129,28 @@ Si el flasheo falla con `Failed to connect to ESP32`: mantén pulsado el botón
    los manda todo por BLE.
 
 3. El ESP32 responde **`STATUS:CONNECTED`** y deja de anunciar BLE. Desde ese
-   momento mide cada 30 s y envía los datos.
+   momento mide cada 10 s y envía los datos en un lote por minuto.
 
-Para cambiar de red o de instalación, **borra la configuración** y vuelve a
-provisionar (se guarda en NVS):
+### Cambiar de red o de instalación
 
-```cpp
-// o reinstala el firmware, que también la borra
-```
+El BLE **ya no se abre solo** cuando se cae el Wi-Fi: un corte de red es un caso
+normal y el nodo sigue midiendo y guardando. Para reprovisionar:
+
+1. **Mantén pulsado el botón BOOT 3 segundos.** En el serie sale
+   `[BLE] BOOT held: opening provisioning`.
+2. Haz el provisioning desde la app como en el paso 2 (otro SSID, otra instalación).
+3. El BLE se cierra solo al terminar o a los **5 minutos** si no se usa.
+
+Mientras el BLE está abierto el nodo **sigue midiendo**. El BLE sí se abre solo si el
+nodo no tiene credenciales, o si el backend responde `410` (la instalación ya no
+existe).
+
+Qué pasa con los datos pendientes al reprovisionar:
+
+| Caso | Buffer |
+|------|--------|
+| Misma instalación (solo cambió el Wi-Fi) | Se **conserva** y se envía por la red nueva |
+| Instalación distinta | Se **descarta**: eran lecturas de otro lugar |
 
 ---
 
@@ -145,11 +164,14 @@ provisionar (se guarda en NVS):
   humedad     : 48.0
   ruido       : 41.0 dB
   CO2 (aprox) : 620
-[HTTP] 00000000-0000-4000-8000-000000000071 -> 201 ok
-[HTTP] 00000000-0000-4000-8000-000000000072 -> 201 ok
-[HTTP] 00000000-0000-4000-8000-000000000074 -> 201 ok
-[HTTP] 00000000-0000-4000-8000-000000000073 -> 201 ok
+[BUFFER] stored, 3 pending                    <- cada ciclo se guarda primero
+...
+[SYNC] batch 6 cycle(s), 24 reading(s): accepted=24 duplicates=0 rejected=0
 ```
+
+Cada minuto sale un lote de unos 6 ciclos (24 lecturas). Una lectura llega al
+backend hasta ~60 s después de tomarse, y las alertas se evalúan con ese mismo
+retraso (ADR-022).
 
 Y en el frontend (`http://localhost:3000`) → detalle del ambiente → las cuatro
 métricas con sus valores.
@@ -160,9 +182,14 @@ métricas con sus valores.
 
 | Síntoma | Causa | Qué hacer |
 |---------|-------|-----------|
-| `... -> 401` al enviar | Token caducado o ausente | Reprovisionar desde la app |
-| `... -> 403` | El token no es de dispositivo | Reprovisionar: la app emite el token nuevo |
-| `... -> 000 FALLO` | No llega al backend | Comprueba que `BACKEND_HOST` es tu IP actual y que el stack está levantado (`cd infra && ./up.sh`) |
+| `[SYNC] batch failed (401)` | Token caducado o ausente | Reprovisionar desde la app. Los ciclos **no se pierden**: quedan en el buffer |
+| `[SYNC] batch failed (403)` | El token no es de dispositivo o es de otro sensor | Reprovisionar: la app emite el token nuevo |
+| `[SYNC] batch failed (404/500)` | El backend no tiene el endpoint de lotes o falló | El nodo reintenta cada minuto y conserva todo. Revisa que `ms-environment-monitoring` esté desplegado |
+| `[SYNC] batch failed (-1)` / `(-11)` | No llega al backend (red, DNS o timeout) | Se reintenta solo. Si persiste, revisa el Wi-Fi |
+| `[SYNC] 410: the installation no longer exists` | La instalación se cerró | El BLE se abre solo: reprovisionar desde la app |
+| `[BUFFER] full: oldest unsent cycle overwritten` | Más de 24 h sin enviar | Se pierden los ciclos más viejos. Restablece la conexión |
+| `[BUFFER] write failed` | Error del sistema de archivos | Repórtalo con el `[BOOT] reset reason` y el heap libre que imprime la línea |
+| Tras un reinicio no hay datos 3 min | El MQ-135 calienta tras cada arranque | Normal: es el tiempo de calentamiento. Los pendientes se conservan |
 | `STATUS:FAIL` | Wi-Fi incorrecto | Reprovisionar con el SSID/contraseña correctos |
 | `STATUS:ERR_JSON` | Payload incompleto | Usa la app: espera `{ssid, pass, token, installationId}` |
 | Temperatura `n/d` | Cables o pull-up del DHT-11 | Revisa DATA→GPIO5 y la resistencia de 10 kΩ |
@@ -171,7 +198,22 @@ métricas con sus valores.
 
 ---
 
-## 8. Sobre el CO₂
+## 8. Buffer sin conexión (ADR-021)
+
+- **Dónde:** archivo `/cycles.bin` en LittleFS. 8.640 registros de 24 bytes
+  (207.360 B), uno por ciclo de 10 s, o sea **24 h**. Cada registro lleva su hora
+  UTC, un número de secuencia y un CRC; un registro dañado se descarta.
+- **Orden y borrado:** se envía del más viejo al más nuevo y **solo se borra lo que el
+  backend confirmó** (`200`). Si se llena, se sobrescribe lo más viejo.
+- **Con cola pendiente:** se envían 25 ciclos por petición, con 0,8 s entre una y otra.
+- **Hora:** el nodo sincroniza con NTP. Las lecturas previas a la sincronización se
+  retienen y se descartan si el nodo se reinicia antes de sincronizar.
+- **Respuestas del backend:** `200` confirma; `400`/`413` descartan el lote (no se
+  arregla reintentando); `401`/`403`/`429`/`5xx`/red se reintentan; `410` detiene el
+  envío y abre el BLE.
+- **Reinicio:** el estado se reconstruye al arrancar (`[BUFFER] ready: N cycle(s) pending`).
+
+## 9. Sobre el CO₂
 
 El **MQ-135 no es un sensor NDIR de CO₂**: es un sensor general de calidad de
 aire (NH3, NOx, alcohol, benceno, humo). El ppm que publica es una
