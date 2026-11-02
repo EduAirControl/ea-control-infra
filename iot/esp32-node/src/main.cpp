@@ -678,6 +678,8 @@ static void handleBleTimeout() {
 // ─────────────────────────────────────────────────────────────
 void setup() {
     Serial.begin(115200);
+    // Motivo del ultimo reinicio: distingue un corte de energia de un panic o un watchdog.
+    Serial.printf("[BOOT] reset reason: %d\n", (int)esp_reset_reason());
     delay(500);
     Serial.println();
     Serial.println("=== EduAirControl - nodo ESP32 ===");
