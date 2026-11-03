@@ -184,6 +184,7 @@ métricas con sus valores.
 |---------|-------|-----------|
 | `[SYNC] batch failed (401)` | Token caducado o ausente | Reprovisionar desde la app. Los ciclos **no se pierden**: quedan en el buffer |
 | `[SYNC] batch failed (403)` | El token no es de dispositivo o es de otro sensor | Reprovisionar: la app emite el token nuevo |
+| `[SYNC] 429: the server asks to wait N s` | El backend limita la frecuencia | El nodo espera lo que pide `Retry-After`; no hay que hacer nada |
 | `[SYNC] batch failed (404/500)` | El backend no tiene el endpoint de lotes o falló | El nodo reintenta cada minuto y conserva todo. Revisa que `ms-environment-monitoring` esté desplegado |
 | `[SYNC] batch failed (-1)` / `(-11)` | No llega al backend (red, DNS o timeout) | Se reintenta solo. Si persiste, revisa el Wi-Fi |
 | `[SYNC] 410: the installation no longer exists` | La instalación se cerró | El BLE se abre solo: reprovisionar desde la app |
@@ -211,6 +212,19 @@ métricas con sus valores.
 - **Respuestas del backend:** `200` confirma; `400`/`413` descartan el lote (no se
   arregla reintentando); `401`/`403`/`429`/`5xx`/red se reintentan; `410` detiene el
   envío y abre el BLE.
+- **Respuestas del backend:** `200` confirma; `400`/`413` descartan el lote (no se
+  arregla reintentando); `401`/`403`/`429`/`5xx`/red se reintentan; `410` detiene el
+  envío y abre el BLE.
+- **Reintentos:** nunca borran nada.
+  - `429` con `Retry-After` en segundos: el nodo espera ese tiempo (entre 1 s y 1 h).
+    Una fecha HTTP o un valor ilegible se tratan como si no viniera.
+  - `5xx`, red, `401`/`403` y `429` sin `Retry-After`: retroceso exponencial de 60 s, 120 s,
+    240 s... hasta un tope de 10 min (`RETRY_CAP_MS`), con hasta un 20 % menos al azar
+    para que muchos nodos no reintenten a la vez.
+  - Un lote confirmado reinicia el contador. También lo reinicia la vuelta del Wi-Fi; en
+    ese caso el primer envío sale tras 0 a 15 s al azar.
+  - Medir y guardar siguen igual durante la espera. El serie muestra
+    `[SYNC] next attempt in N s (consecutive failure K)`.
 - **Reinicio:** el estado se reconstruye al arrancar (`[BUFFER] ready: N cycle(s) pending`).
 
 ## 9. Sobre el CO₂

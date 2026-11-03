@@ -116,8 +116,22 @@
 // 1000, pero la RAM del nodo no.
 #define BATCH_MAX_CYCLES         25
 // Vaciando una cola grande se espacian los lotes (el gateway admite 100 peticiones
-// por minuto por usuario y ruta). Los reintentos con 429 llegan con el Issue #8.
+
+// Vaciando una cola grande se espacian los lotes (el gateway admite 100 peticiones
+// por minuto por usuario y ruta).
 #define BATCH_PACING_MS          800
+
+// Reintentos (ADR-021 sección 6). Tras un fallo recuperable (5xx, red, 401/403, 429 sin
+// Retry-After) la espera crece 60 s, 120 s, 240 s... hasta RETRY_CAP_MS. El jitter resta
+// hasta ese porcentaje para que una flota no reintente a la vez tras una caída del backend.
+// Un 429 con Retry-After espera lo que pide el servidor, acotado a [min, max].
+#define RETRY_CAP_MS             600000  // tope del retroceso: 10 min
+#define RETRY_JITTER_PERCENT     20
+#define RETRY_AFTER_MIN_MS       1000
+#define RETRY_AFTER_MAX_MS       3600000 // 1 h: un valor absurdo no calla al nodo por horas
+// Al volver el Wi-Fi el primer envío sale tras una espera al azar de 0 a este valor.
+#define RECONNECT_SPREAD_MS      15000
+
 
 // ─────────────────────────────────────────────────────────────
 // RELOJ (ADR-021)
