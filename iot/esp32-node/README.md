@@ -212,6 +212,9 @@ métricas con sus valores.
 - **Respuestas del backend:** `200` confirma; `400`/`413` descartan el lote (no se
   arregla reintentando); `401`/`403`/`429`/`5xx`/red se reintentan; `410` detiene el
   envío y abre el BLE.
+- **Respuestas del backend:** `200` confirma; `400`/`413` descartan el lote (no se
+  arregla reintentando); `401`/`403`/`429`/`5xx`/red se reintentan; `410` detiene el
+  envío y abre el BLE.
 - **Reintentos:** nunca borran nada.
   - `429` con `Retry-After` en segundos: el nodo espera ese tiempo (entre 1 s y 1 h).
     Una fecha HTTP o un valor ilegible se tratan como si no viniera.
